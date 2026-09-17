@@ -1,0 +1,23 @@
+<!doctype html><meta charset="utf-8"><title>TV Agent</title>
+<style>
+  :root { --bg:#0b0f14; --fg:#e8eef5; --muted:#7c8b9a; }
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);
+    font:2.5vw/1.4 system-ui,sans-serif;display:flex;align-items:center;
+    justify-content:center;text-align:center}
+  #who{color:var(--muted);font-size:1.5vw;letter-spacing:.1em;text-transform:uppercase}
+  #text{max-width:80vw;margin-top:1vh}
+  #orb{width:8vw;height:8vw;border-radius:50%;margin:0 auto 3vh;
+    background:radial-gradient(circle at 40% 35%,#4fd1ff,#1567a8);
+    animation:pulse 2s ease-in-out infinite}
+  @keyframes pulse{50%{transform:scale(1.08);opacity:.85}}
+</style>
+<div><div id="orb"></div><div id="who"></div><div id="text">Connecting…</div></div>
+<script>
+  const ws = new WebSocket("ws://localhost:8765");
+  ws.onmessage = e => {
+    const s = JSON.parse(e.data);
+    document.getElementById("who").textContent = s.person || "";
+    document.getElementById("text").textContent = s.text || "";
+  };
+  ws.onclose = () => document.getElementById("text").textContent = "Disconnected";
+</script>
