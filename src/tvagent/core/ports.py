@@ -1,5 +1,7 @@
 from typing import Protocol
-from tvagent.core.models import AudioClip, Person, Turn, Fact, RenderState, PersonId
+
+from tvagent.core.models import AudioClip, Fact, Person, PersonId, RenderState, Turn
+
 
 class WakeWord(Protocol):
     def wait(self) -> None: ...

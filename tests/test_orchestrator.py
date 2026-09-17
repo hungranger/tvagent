@@ -1,10 +1,20 @@
-import time
-from tvagent.core.models import AudioClip, Person
+from tests.fakes import (
+    FakeAudioCapture,
+    FakeDisplay,
+    FakeLLM,
+    FakeMemory,
+    FakeSpeakerID,
+    FakeSTT,
+    FakeTTS,
+    FakeWakeWord,
+)
+from tvagent.core.models import AudioClip, Fact, Person
 from tvagent.core.orchestrator import Orchestrator
-from tests.fakes import (FakeWakeWord, FakeAudioCapture, FakeSpeakerID, FakeSTT,
-                         FakeLLM, FakeTTS, FakeMemory, FakeDisplay)
 
-def _orch(memory, speaker_id, said="what's my day", reply="Standup at 9"):
+
+def _orch(
+    memory: FakeMemory, speaker_id: str, said: str = "what's my day", reply: str = "Standup at 9"
+) -> tuple[Orchestrator, FakeLLM, FakeTTS, FakeDisplay]:
     clip = AudioClip(samples=b"x", sample_rate=16000)
     llm = FakeLLM(reply)
     tts, disp = FakeTTS(), FakeDisplay()
@@ -18,27 +28,25 @@ def test_turn_tuned_to_person_and_persisted():
     m.upsert_person(Person(id="dad", name="Dad", embedding=[0.1], prefs={"tone": "adult"}))
     orch, llm, tts, disp = _orch(m, "dad")
     turn = orch.run_once()
-    assert "Dad" in llm.last_system          # F5: prompt tuned to who
+    assert llm.last_system is not None and "Dad" in llm.last_system  # F5: prompt tuned to who
     assert turn.replied == "Standup at 9"
     assert tts.spoken == ["Standup at 9"]    # F7
-    assert disp.last.text == "Standup at 9"  # F8
+    assert disp.last is not None and disp.last.text == "Standup at 9"  # F8
     assert m.recent_turns("dad", 1)[0].said == "what's my day"  # F9
 
 def test_memory_recall_reaches_prompt():
-    from tvagent.core.models import Fact
     m = FakeMemory()
     m.upsert_person(Person(id="dad", name="Dad", embedding=[0.1], prefs={}))
     m.add_fact(Fact(person_id="dad", text="allergic to peanuts", created_at=1.0))
     orch, llm, _, _ = _orch(m, "dad", said="what am I allergic to")
     orch.run_once()
-    assert "peanuts" in llm.last_system      # F10: fact reaches the prompt
+    assert llm.last_system is not None and "peanuts" in llm.last_system  # F10: fact in prompt
 
 def test_guest_does_not_read_or_write_enrolled_memory():
-    from tvagent.core.models import Fact
     m = FakeMemory()
     m.upsert_person(Person(id="dad", name="Dad", embedding=[0.1], prefs={}))
     m.add_fact(Fact(person_id="dad", text="secret", created_at=1.0))
     orch, llm, _, _ = _orch(m, "guest")
     orch.run_once()
-    assert "secret" not in llm.last_system   # F11: guest can't read Dad
+    assert llm.last_system is not None and "secret" not in llm.last_system  # F11: guest isolation
     assert m.recent_turns("dad", 10) == []   # F11: guest write didn't touch Dad

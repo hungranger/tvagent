@@ -1,17 +1,27 @@
+from typing import Any, ClassVar
+
 from tvagent.adapters.llm_claude import ClaudeLLM
 
 
-class _StubMessages:
-    def __init__(self, outer): self.outer = outer
-    def create(self, **kwargs):
-        self.outer.seen = kwargs
-        class Block: type = "text"; text = "hi Dad"
-        class Msg: content = [Block()]
-        return Msg()
-
-
 class _StubClient:
-    def __init__(self): self.messages = _StubMessages(self)
+    def __init__(self) -> None:
+        self.seen: dict[str, Any] = {}
+        self.messages = _StubMessages(self)
+
+
+class _StubMessages:
+    def __init__(self, outer: _StubClient) -> None: self.outer = outer
+    def create(self, **kwargs: Any) -> Any:
+        self.outer.seen = kwargs
+
+        class Block:
+            type = "text"
+            text = "hi Dad"
+
+        class Msg:
+            content: ClassVar = [Block()]
+
+        return Msg()
 
 
 def test_respond_extracts_text_and_sends_system():

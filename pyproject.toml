@@ -13,6 +13,29 @@ pythonpath = ["src"]
 testpaths = ["tests"]
 markers = ["component: real-backend tests needing models/audio fixtures"]
 
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "PL", "RUF", "N", "C4", "PTH"]
+# PLR2004 = magic value used in comparison — this is the "no magic number/string" rule.
+
+[tool.ruff.lint.per-file-ignores]
+# Tests may use literals freely (assertions, fixtures) and don't need the magic-value rule.
+"tests/**" = ["PLR2004", "S101"]
+"scripts/**" = ["PLR2004"]
+
+[tool.pyright]
+include = ["src", "tests", "scripts"]
+pythonVersion = "3.11"
+typeCheckingMode = "strict"
+# Optional runtime backends (anthropic, faster_whisper, piper, speechbrain, torch,
+# webrtcvad, sounddevice, openwakeword, numpy, websockets) are not installed in the
+# dev/type-check environment and several ship no type stubs. Do not fail on them.
+reportMissingImports = "none"
+reportMissingModuleSource = "none"
+
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"

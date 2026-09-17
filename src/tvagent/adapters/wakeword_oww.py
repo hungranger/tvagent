@@ -1,19 +1,31 @@
-class OwwWakeWord:
-    def __init__(self, model_name: str = "hey_jarvis", _detector=None, _source=None):
-        self.model_name, self._detector, self._source = model_name, _detector, _source
+from typing import Any
 
-    def _ensure(self):
+_SAMPLE_RATE = 16000
+_WAKE_THRESHOLD = 0.5
+
+
+class OwwWakeWord:
+    def __init__(
+        self, model_name: str = "hey_jarvis", _detector: Any = None, _source: Any = None
+    ) -> None:
+        self.model_name = model_name
+        self._detector: Any = _detector
+        self._source: Any = _source
+
+    def _ensure(self) -> None:
         if self._detector is None:
-            from openwakeword.model import Model
-            self._detector = Model(wakeword_models=[self.model_name])
+            import openwakeword.model as oww_model  # noqa: PLC0415 -- lazy
+            om: Any = oww_model
+            self._detector = om.Model(wakeword_models=[self.model_name])
         if self._source is None:
-            from tvagent.adapters.audio_vad import _MicSource
-            self._source = _MicSource(16000)
+            from tvagent.adapters.audio_vad import MicSource  # noqa: PLC0415 -- lazy
+            self._source = MicSource(_SAMPLE_RATE)
 
     def wait(self) -> None:
         self._ensure()
+        import numpy as np  # noqa: PLC0415 -- lazy
+        npx: Any = np
         for frame, _ in self._source.frames():
-            import numpy as np
-            scores = self._detector.predict(np.frombuffer(frame, dtype=np.int16))
-            if any(v > 0.5 for v in scores.values()):
+            scores = self._detector.predict(npx.frombuffer(frame, dtype=np.int16))
+            if any(v > _WAKE_THRESHOLD for v in scores.values()):
                 return

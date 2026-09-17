@@ -1,4 +1,6 @@
-import ast, pathlib
+import ast
+import pathlib
+
 
 def test_core_imports_only_core():
     # anchor off this file, not CWD, so it can't vacuously pass from another dir
@@ -10,7 +12,9 @@ def test_core_imports_only_core():
         tree = ast.parse(pyfile.read_text())
         for node in ast.walk(tree):
             mod = None
-            if isinstance(node, ast.ImportFrom): mod = node.module or ""
-            elif isinstance(node, ast.Import): mod = node.names[0].name
+            if isinstance(node, ast.ImportFrom):
+                mod = node.module or ""
+            elif isinstance(node, ast.Import):
+                mod = node.names[0].name
             if mod and mod.startswith("tvagent") and not mod.startswith("tvagent.core"):
                 raise AssertionError(f"{pyfile.name} imports non-core module {mod}")

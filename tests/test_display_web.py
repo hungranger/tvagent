@@ -1,6 +1,8 @@
 import json
-from tvagent.core.models import RenderState
+
 from tvagent.adapters.display_web import state_to_json
+from tvagent.core.models import RenderState
+
 
 def test_state_to_json_shape():
     s = RenderState(person="Dad", text="hi", card={"kind": "weather"})

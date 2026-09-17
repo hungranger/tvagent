@@ -1,15 +1,21 @@
+import pathlib
+import wave
+from typing import Any
+
+import numpy as np
 import pytest
-from tvagent.core.models import AudioClip
+
 from tvagent.adapters.stt_whisper import WhisperSTT
+from tvagent.core.models import AudioClip
 
 
 class _Seg:
-    def __init__(self, t):
+    def __init__(self, t: str) -> None:
         self.text = t
 
 
 class _StubModel:
-    def transcribe(self, audio, **kw):
+    def transcribe(self, audio: "np.ndarray[Any, Any]", **kw: Any) -> tuple[list[_Seg], None]:
         return ([_Seg("hello there")], None)
 
 
@@ -22,9 +28,6 @@ def test_transcribe_joins_segments():
 @pytest.mark.component
 def test_real_whisper_on_fixture():
     pytest.importorskip("faster_whisper")
-    import wave
-    import pathlib
-
     f = pathlib.Path("tests/fixtures/hello.wav")
     if not f.exists():
         pytest.skip("record tests/fixtures/hello.wav saying 'hello there'")

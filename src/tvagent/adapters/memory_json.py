@@ -1,9 +1,12 @@
-import json, pathlib
+import json
+import pathlib
 from dataclasses import asdict
-from tvagent.core.models import Person, Turn, Fact
+
+from tvagent.core.models import Fact, Person, Turn
+
 
 class JsonMemory:
-    def __init__(self, root: pathlib.Path):
+    def __init__(self, root: pathlib.Path) -> None:
         self.root = pathlib.Path(root)
 
     def _dir(self, person_id: str) -> pathlib.Path:
@@ -16,15 +19,18 @@ class JsonMemory:
 
     def get_person(self, person_id: str) -> Person | None:
         f = self.root / person_id / "profile.json"
-        if not f.exists(): return None
+        if not f.exists():
+            return None
         return Person(**json.loads(f.read_text()))
 
     def list_people(self) -> list[Person]:
-        if not self.root.exists(): return []
-        out = []
+        if not self.root.exists():
+            return []
+        out: list[Person] = []
         for d in self.root.iterdir():
             p = self.get_person(d.name)
-            if p: out.append(p)
+            if p:
+                out.append(p)
         return out
 
     def save_turn(self, turn: Turn) -> None:
@@ -33,9 +39,10 @@ class JsonMemory:
 
     def recent_turns(self, person_id: str, n: int) -> list[Turn]:
         f = self.root / person_id / "turns.jsonl"
-        if not f.exists(): return []
+        if not f.exists():
+            return []
         lines = f.read_text().splitlines()[-n:]
-        return [Turn(**json.loads(l)) for l in lines]
+        return [Turn(**json.loads(line)) for line in lines]
 
     def add_fact(self, fact: Fact) -> None:
         with (self._dir(fact.person_id) / "facts.jsonl").open("a") as fh:
@@ -43,5 +50,6 @@ class JsonMemory:
 
     def get_facts(self, person_id: str) -> list[Fact]:
         f = self.root / person_id / "facts.jsonl"
-        if not f.exists(): return []
-        return [Fact(**json.loads(l)) for l in f.read_text().splitlines()]
+        if not f.exists():
+            return []
+        return [Fact(**json.loads(line)) for line in f.read_text().splitlines()]

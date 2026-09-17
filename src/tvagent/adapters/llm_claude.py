@@ -1,20 +1,29 @@
+from typing import Any
+
+_MODEL = "claude-opus-5"
+_MAX_TOKENS = 512
+_EFFORT = "low"  # voice latency knob
+
+
 class ClaudeLLM:
-    def __init__(self, model: str = "claude-opus-5", client=None, max_tokens: int = 512):
+    def __init__(
+        self, model: str = _MODEL, client: Any = None, max_tokens: int = _MAX_TOKENS
+    ) -> None:
         self.model, self.max_tokens = model, max_tokens
         if client is None:
-            from anthropic import Anthropic
+            from anthropic import Anthropic  # noqa: PLC0415 -- lazy
             client = Anthropic()
         self.client = client
 
     def respond(self, system: str, user: str, history: list[tuple[str, str]]) -> str:
-        messages = []
+        messages: list[dict[str, str]] = []
         for said, replied in history:
             messages.append({"role": "user", "content": said})
             messages.append({"role": "assistant", "content": replied})
         messages.append({"role": "user", "content": user})
         msg = self.client.messages.create(
             model=self.model, max_tokens=self.max_tokens, system=system,
-            output_config={"effort": "low"},  # voice latency knob
+            output_config={"effort": _EFFORT},
             messages=messages,
         )
         return "".join(b.text for b in msg.content if getattr(b, "type", None) == "text").strip()

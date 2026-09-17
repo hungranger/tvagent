@@ -1,4 +1,5 @@
-from tvagent.core.models import AudioClip, Person, Turn, RenderState, GUEST
+from tvagent.core.models import GUEST, AudioClip, Person, RenderState, Turn
+
 
 def test_models_construct():
     clip = AudioClip(samples=b"\x00\x01", sample_rate=16000)

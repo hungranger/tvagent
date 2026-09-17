@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Any
 
 PersonId = str
 GUEST: PersonId = "guest"
@@ -13,7 +14,7 @@ class Person:
     id: str
     name: str
     embedding: list[float]
-    prefs: dict
+    prefs: dict[str, Any]
 
 @dataclass
 class Turn:
@@ -32,4 +33,4 @@ class Fact:
 class RenderState:
     person: str
     text: str
-    card: dict | None = None
+    card: dict[str, Any] | None = None
