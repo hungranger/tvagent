@@ -50,8 +50,11 @@ repos:
         stages: [pre-push]
 
       - id: uv-lock-check
-        name: uv sync --locked (lockfile drift)
-        entry: uv sync --locked
+        name: uv lock --check (lockfile drift)
+        # `uv lock --check` verifies the lockfile is current vs pyproject WITHOUT
+        # mutating the environment. Do NOT use `uv sync --locked` here — it prunes
+        # the dev/run extras from the working venv on every push.
+        entry: uv lock --check
         language: system
         pass_filenames: false
         always_run: true

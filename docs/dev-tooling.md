@@ -11,7 +11,7 @@ Git hooks run through the [pre-commit](https://pre-commit.com) framework, staged
 | pre-commit | pyright | strict type check (`[tool.pyright]`) |
 | pre-push | pytest-cov | tests + coverage floor (`[tool.coverage]`) |
 | pre-push | pip-audit | dependency CVE scan (audits `uv.lock`) |
-| pre-push | uv sync --locked | fails if `uv.lock` drifted from `pyproject.toml` |
+| pre-push | uv lock --check | fails if `uv.lock` drifted from `pyproject.toml` (non-mutating — does not touch the venv) |
 | pre-push | semgrep | `p/python` + `p/security-audit` rule sets |
 
 ## Reuse in another project
