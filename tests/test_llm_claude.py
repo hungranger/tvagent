@@ -44,3 +44,34 @@ def test_respond_includes_prior_turns_in_messages():
         {"role": "assistant", "content": "first answer"},
         {"role": "user", "content": "next question"},
     ]
+
+
+def test_respond_sends_max_tokens_and_output_config():
+    stub = _StubClient()
+    llm = ClaudeLLM(client=stub, max_tokens=77)
+    llm.respond("sys", "hi", [])
+    assert stub.seen["max_tokens"] == 77
+    assert stub.seen["output_config"] == {"effort": "low"}
+
+
+def test_respond_joins_only_text_blocks_in_order():
+    class _Text:
+        def __init__(self, text: str) -> None:
+            self.type, self.text = "text", text
+
+    class _NonText:
+        type = "tool_use"
+        text = "IGNORED"
+
+    class _Msg:
+        content: ClassVar = [_Text("hello "), _NonText(), _Text("world")]
+
+    class _Messages:
+        def create(self, **kwargs: Any) -> Any:
+            return _Msg()
+
+    class _Client:
+        messages = _Messages()
+
+    out = ClaudeLLM(client=_Client()).respond("sys", "hi", [])
+    assert out == "hello world"

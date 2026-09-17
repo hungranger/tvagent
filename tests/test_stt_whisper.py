@@ -15,14 +15,24 @@ class _Seg:
 
 
 class _StubModel:
+    def __init__(self) -> None:
+        self.calls: list[tuple[Any, dict[str, Any]]] = []
+
     def transcribe(self, audio: "np.ndarray[Any, Any]", **kw: Any) -> tuple[list[_Seg], None]:
-        return ([_Seg("hello there")], None)
+        self.calls.append((audio, kw))
+        return ([_Seg("hello"), _Seg("there")], None)
 
 
 def test_transcribe_joins_segments():
-    stt = WhisperSTT(_model=_StubModel())
-    out = stt.transcribe(AudioClip(samples=b"\x00\x00", sample_rate=16000))
-    assert out == "hello there"
+    model = _StubModel()
+    stt = WhisperSTT(_model=model)
+    samples = np.array([0, 16384], dtype=np.int16).tobytes()
+    out = stt.transcribe(AudioClip(samples=samples, sample_rate=16000))
+    assert out == "hello there"  # pins the " " join separator across segments
+    audio, kw = model.calls[0]
+    assert kw == {"language": "en"}
+    assert np.allclose(audio, [0.0, 0.5])  # pins int16->float32 scaling by /_PCM_MAX
+    assert audio.dtype == np.float32
 
 
 @pytest.mark.component

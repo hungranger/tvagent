@@ -36,6 +36,18 @@ typeCheckingMode = "strict"
 reportMissingImports = "none"
 reportMissingModuleSource = "none"
 
+[tool.mutmut]
+source_paths = ["src/tvagent/"]
+pytest_add_cli_args_test_selection = ["tests/"]
+# Mutate only lines pytest actually exercises, and reuse the [tool.coverage.report]
+# exclude_also patterns above (mutmut applies coverage.py's excluded-lines analysis
+# unconditionally) to skip hardware/IO-only code with no CI-runnable tests: the real
+# _default_* embedders/synth/play, MicSource, record_seconds, WebDisplay._serve, and
+# lazy heavy-dep construction paths. Everything else (orchestrator, memory_json,
+# config, speakerid cosine/identify, audio_vad VadCapture silence logic, llm
+# text-extraction, tts empty-text guard, display state_to_json) stays mutated.
+mutate_only_covered_lines = true
+
 [tool.coverage.run]
 source = ["src/tvagent"]
 branch = true

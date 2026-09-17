@@ -22,3 +22,7 @@ def test_empty_text_does_not_play():
     played: list[bytes] = []
     PiperTTS(_synth=lambda t: b"x", _play=played.append).speak("  ")
     assert played == []
+
+
+def test_default_voice_is_stored():
+    assert PiperTTS().voice == "en_US-amy-medium"

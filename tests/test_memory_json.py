@@ -13,6 +13,14 @@ def test_person_and_turn_roundtrip(tmp_path: pathlib.Path):
     m.save_turn(Turn(person_id="dad", ts=2.0, said="bye", replied="cya"))
     recent = m.recent_turns("dad", 1)
     assert len(recent) == 1 and recent[0].said == "bye"
+    assert len(m.recent_turns("dad", 2)) == 2  # pins the [-n:] slice, not [n:]
+
+
+def test_dir_creates_missing_parent_directories(tmp_path: pathlib.Path):
+    # root itself doesn't exist yet -> _dir must create it (and person_id) in one go
+    m = JsonMemory(tmp_path / "nested" / "root")
+    m.upsert_person(Person(id="dad", name="Dad", embedding=[0.1], prefs={}))
+    assert m.get_person("dad") is not None
 
 
 def test_facts_and_guest_isolation(tmp_path: pathlib.Path):

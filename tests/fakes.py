@@ -22,8 +22,10 @@ class FakeAudioCapture:
 class FakeSpeakerID:
     def __init__(self, person_id: str = GUEST) -> None:
         self._id = person_id
+        self.last_clip: AudioClip | None = None
 
     def identify(self, clip: AudioClip) -> str:
+        self.last_clip = clip
         return self._id
 
     def enroll(self, name: str, clip: AudioClip) -> Person:
@@ -33,8 +35,10 @@ class FakeSpeakerID:
 class FakeSTT:
     def __init__(self, text: str) -> None:
         self._text = text
+        self.last_clip: AudioClip | None = None
 
     def transcribe(self, clip: AudioClip) -> str:
+        self.last_clip = clip
         return self._text
 
 
@@ -43,9 +47,10 @@ class FakeLLM:
         self._reply = reply
         self.last_system: str | None = None
         self.last_user: str | None = None
+        self.last_history: list[tuple[str, str]] | None = None
 
     def respond(self, system: str, user: str, history: list[tuple[str, str]]) -> str:
-        self.last_system, self.last_user = system, user
+        self.last_system, self.last_user, self.last_history = system, user, history
         return self._reply
 
 
