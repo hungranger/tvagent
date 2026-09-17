@@ -16,6 +16,8 @@ markers = ["component: real-backend tests needing models/audio fixtures"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+# Machine-generated (vulture --make-whitelist) allowlist stub, not real code.
+extend-exclude = [".vulture_allowlist.py"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "PL", "RUF", "N", "C4", "PTH"]
@@ -40,10 +42,9 @@ typeCheckingMode = "strict"
 # dev/type-check environment and several ship no type stubs. Do not fail on them.
 reportMissingImports = "none"
 reportMissingModuleSource = "none"
-reportMissingTypeStubs = "none"
 
 [tool.vulture]
-min_confidence = 80
+min_confidence = 60
 
 [tool.mutmut]
 source_paths = ["src/tvagent/"]

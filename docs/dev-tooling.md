@@ -14,7 +14,7 @@ Git hooks run through the [pre-commit](https://pre-commit.com) framework, staged
 | pre-push | uv lock --check | fails if `uv.lock` drifted from `pyproject.toml` (non-mutating — does not touch the venv) |
 | pre-push | semgrep | `p/python` + `p/security-audit` rule sets |
 | pre-push | ruff-arg | unused function/lambda args (`ARG`), not in the main `[tool.ruff.lint] select` so it stays out of pre-commit |
-| pre-push | vulture | dead code, gated by `.vulture_allowlist.py`. At `--min-confidence 80` this reliably catches unused imports and unreachable code; vulture scores unused functions/classes/attrs/variables at 60% confidence, so those need a manual `--min-confidence 60` pass (higher noise, more false positives from dataclass fields round-tripped through serialization) |
+| pre-push | vulture | dead functions/classes/methods/attrs/variables, gated by `.vulture_allowlist.py`. Runs at `--min-confidence 60` — vulture scores unused functions/classes/attrs/variables at exactly 60%, so `80` (the default-ish "safe" threshold) would only catch unused imports (90%) and unreachable code (100%) and never fire on dead functions, which defeats the point of adding vulture. `60` is noisier (more false positives, e.g. dataclass fields round-tripped through serialization); triage misses into `.vulture_allowlist.py`, don't raise the threshold to silence them |
 
 pyright and the dead-code checks (`ruff --select ARG`, `vulture`) live on pre-push, not
 pre-commit: strict typing and whole-picture dead-code analysis can legitimately fail on
