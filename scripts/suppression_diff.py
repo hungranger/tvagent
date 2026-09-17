@@ -14,9 +14,9 @@ import sys
 from functools import cache
 from pathlib import Path
 
-# This script's own pattern literals, and the doc that names them in prose,
+# This script's own pattern literals, and the docs that name them in prose,
 # would otherwise flag themselves as "new suppressions" -- not real ones.
-SELF_EXCLUDE = {"scripts/suppression_diff.py", "docs/agent-safety.md"}
+SELF_EXCLUDE = {"scripts/suppression_diff.py", "docs/agent-safety.md", "docs/dev-tooling.md"}
 
 PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"#\s*noqa\b"), "noqa"),

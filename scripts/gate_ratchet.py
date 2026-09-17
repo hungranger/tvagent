@@ -10,8 +10,11 @@ import-linter contract may be removed.
 A gate whose config key is absent on master (no baseline to ratchet
 against) is skipped with a printed note -- absence isn't intent, and there
 is nothing to compare against. A gate that *was* present on master and is
-now missing from this tree is correctly caught: it reads back as a weaker
-value (fewer rules, 0 contracts, etc.) by the same comparison and FAILS.
+now missing from this tree is a HARD FAIL, not a skip: deletion is the
+strongest possible weakening (set-valued gates like ruff `select` and
+import-linter contracts catch this by construction -- an empty/shrunk set
+is already "weaker"; value-valued gates like `fail_under` check for it
+explicitly, since a missing value is not comparable by `<`/`>`).
 
 stdlib only: tomllib for TOML, subprocess for `git show origin/master:...`.
 """
@@ -50,7 +53,11 @@ def check_coverage(current: dict[str, Any], base: dict[str, Any]) -> list[str]:
         get(current, "tool", "coverage", "report", "fail_under"),
         get(base, "tool", "coverage", "report", "fail_under"),
     )
-    if old is None or cur is None or cur >= old:
+    if old is None:
+        return []  # no baseline in master -- new gate, nothing to ratchet against
+    if cur is None:
+        return [f"coverage fail_under was DELETED (was {old} in master)"]
+    if cur >= old:
         return []
     return [f"coverage fail_under lowered: {old} -> {cur}"]
 
@@ -71,7 +78,11 @@ def check_mccabe(current: dict[str, Any], base: dict[str, Any]) -> list[str]:
         get(current, "tool", "ruff", "lint", "mccabe", "max-complexity"),
         get(base, "tool", "ruff", "lint", "mccabe", "max-complexity"),
     )
-    if old is None or cur is None or cur <= old:
+    if old is None:
+        return []  # no baseline in master -- new gate, nothing to ratchet against
+    if cur is None:
+        return [f"mccabe max-complexity was DELETED (was {old} in master)"]
+    if cur <= old:
         return []
     return [f"mccabe max-complexity raised: {old} -> {cur}"]
 
@@ -81,7 +92,11 @@ def check_vulture(current: dict[str, Any], base: dict[str, Any]) -> list[str]:
         get(current, "tool", "vulture", "min_confidence"),
         get(base, "tool", "vulture", "min_confidence"),
     )
-    if old is None or cur is None or cur <= old:
+    if old is None:
+        return []  # no baseline in master -- new gate, nothing to ratchet against
+    if cur is None:
+        return [f"vulture min_confidence was DELETED (was {old} in master)"]
+    if cur <= old:
         return []
     return [f"vulture min_confidence raised (weaker, noisier floor is 60): {old} -> {cur}"]
 
@@ -96,9 +111,13 @@ def check_pyright(current: dict[str, Any], base: dict[str, Any]) -> list[str]:
         failures.append(f"pyright typeCheckingMode no longer strict: {cur_mode!r}")
     for key in ("reportMissingImports", "reportMissingModuleSource", "reportMissingTypeStubs"):
         cur, old = get(current, "tool", "pyright", key), get(base, "tool", "pyright", key)
-        if old not in _STRICTNESS or cur not in _STRICTNESS:
-            continue  # absent on either side -- no baseline, skip
-        if _STRICTNESS[cur] < _STRICTNESS[old]:
+        if old not in _STRICTNESS:
+            continue  # no baseline in master -- new gate, nothing to ratchet against
+        if cur not in _STRICTNESS:
+            failures.append(
+                f"pyright {key} was DELETED or set to an unrecognized value (was {old!r} in master)"
+            )
+        elif _STRICTNESS[cur] < _STRICTNESS[old]:
             failures.append(f"pyright {key} loosened: {old!r} -> {cur!r}")
     return failures
 
@@ -136,10 +155,14 @@ MIN_RE = re.compile(r"--min[= ](\d+(?:\.\d+)?)")
 def check_mutation_floor(current_text: str, base_text: str | None) -> list[str]:
     if base_text is None:
         return []
-    old_match, cur_match = MIN_RE.search(base_text), MIN_RE.search(current_text)
-    if not old_match or not cur_match:
-        return []
-    old, cur = float(old_match.group(1)), float(cur_match.group(1))
+    old_match = MIN_RE.search(base_text)
+    if not old_match:
+        return []  # no baseline in master -- new gate, nothing to ratchet against
+    old = float(old_match.group(1))
+    cur_match = MIN_RE.search(current_text)
+    if not cur_match:
+        return [f"mutation floor (--min) was DELETED (was {old} in master)"]
+    cur = float(cur_match.group(1))
     if cur >= old:
         return []
     return [f"mutation floor lowered: {old} -> {cur}"]
@@ -206,4 +229,16 @@ if __name__ == "__main__":
         "run: python scripts/mutation_score.py --min 50",
         "run: python scripts/mutation_score.py --min 90",
     )
+
+    # Deletion case: master HAS the gate, the PR removes the whole table/key --
+    # must FAIL, not skip (this is the bug this fix-round closed).
+    _deleted: dict[str, Any] = {"tool": {}}
+    _deleted_failures = run(_deleted, _base)
+    assert len(_deleted_failures) >= 3, _deleted_failures  # coverage, mccabe, vulture at least
+    assert any("DELETED" in f for f in _deleted_failures), _deleted_failures
+    assert check_mutation_floor(
+        "run: python scripts/mutation_score.py",  # --min flag removed
+        "run: python scripts/mutation_score.py --min 90",
+    )
+
     sys.exit(main())
