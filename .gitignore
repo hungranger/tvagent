@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtualenvs
+.venv/
+venv/
+env/
+
+# Test / tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# SDD scratch (per-plan workspace: ledgers, briefs, reports, review packages)
+.superpowers/
+
+# Runtime data (per-person memory, verify runs) — never commit personal data
+data/
+
+# Model caches downloaded at runtime
+*.onnx
+*.pt
+
+# Audio fixtures are recorded locally by the developer
+tests/fixtures/*.wav
+
+# OS
+.DS_Store
