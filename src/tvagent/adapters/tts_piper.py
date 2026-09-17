@@ -3,11 +3,13 @@ import wave
 from collections.abc import Callable
 from typing import Any
 
+_VOICE = "en_US-amy-medium"
+
 
 class PiperTTS:
     def __init__(
         self,
-        voice: str = "en_US-amy-medium",
+        voice: str = _VOICE,
         _synth: Callable[[str], bytes] | None = None,
         _play: Callable[[bytes], None] | None = None,
     ) -> None:

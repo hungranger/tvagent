@@ -9,6 +9,7 @@ from tvagent.core.ports import MemoryStore
 
 _PCM_MAX = 32768.0
 _DEFAULT_THRESHOLD = 0.25
+_ECAPA_SOURCE = "speechbrain/spkrec-ecapa-voxceleb"
 
 
 def cosine(a: list[float], b: list[float]) -> float:
@@ -33,8 +34,7 @@ class EcapaSpeakerID:
         if self._model is None:
             import speechbrain.inference.speaker as sb_speaker  # noqa: PLC0415 -- lazy
             sb: Any = sb_speaker
-            self._model = sb.EncoderClassifier.from_hparams(
-                source="speechbrain/spkrec-ecapa-voxceleb")
+            self._model = sb.EncoderClassifier.from_hparams(source=_ECAPA_SOURCE)
         import torch  # noqa: PLC0415 -- lazy
         th: Any = torch
         npx: Any = np

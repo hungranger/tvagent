@@ -1,12 +1,15 @@
 from typing import Any
 
+from tvagent.adapters.audio_vad import MicSource
+
 _SAMPLE_RATE = 16000
 _WAKE_THRESHOLD = 0.5
+_WAKE_MODEL = "hey_jarvis"
 
 
 class OwwWakeWord:
     def __init__(
-        self, model_name: str = "hey_jarvis", _detector: Any = None, _source: Any = None
+        self, model_name: str = _WAKE_MODEL, _detector: Any = None, _source: Any = None
     ) -> None:
         self.model_name = model_name
         self._detector: Any = _detector
@@ -18,7 +21,6 @@ class OwwWakeWord:
             om: Any = oww_model
             self._detector = om.Model(wakeword_models=[self.model_name])
         if self._source is None:
-            from tvagent.adapters.audio_vad import MicSource  # noqa: PLC0415 -- lazy
             self._source = MicSource(_SAMPLE_RATE)
 
     def wait(self) -> None:

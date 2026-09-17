@@ -20,6 +20,7 @@ class WebDisplay:
 
     def _serve(self) -> None:
         import websockets  # noqa: PLC0415 -- lazy
+        ws_lib: Any = websockets
         asyncio.set_event_loop(self._loop)
 
         async def handler(ws: Any) -> None:
@@ -32,7 +33,7 @@ class WebDisplay:
                 self._clients.discard(ws)
 
         async def main() -> None:
-            async with websockets.serve(handler, "localhost", self.port):
+            async with ws_lib.serve(handler, "localhost", self.port):
                 await asyncio.Future()
         self._loop.run_until_complete(main())
 

@@ -11,8 +11,9 @@ class ClaudeLLM:
     ) -> None:
         self.model, self.max_tokens = model, max_tokens
         if client is None:
-            from anthropic import Anthropic  # noqa: PLC0415 -- lazy
-            client = Anthropic()
+            import anthropic  # noqa: PLC0415 -- lazy
+            an: Any = anthropic
+            client = an.Anthropic()
         self.client = client
 
     def respond(self, system: str, user: str, history: list[tuple[str, str]]) -> str:

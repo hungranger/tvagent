@@ -4,6 +4,8 @@ from tvagent.core import ports
 from tvagent.core.models import GUEST, Fact, Person, RenderState, Turn
 
 _HISTORY_LIMIT = 5
+_DEFAULT_TONE = "friendly"
+_TONE_PREF_KEY = "tone"
 
 
 class Orchestrator:
@@ -20,7 +22,7 @@ class Orchestrator:
         self, person: Person | None, facts: list[Fact], history: list[Turn], said: str
     ) -> tuple[str, str]:
         who = person.name if person else "an unknown guest"
-        tone = (person.prefs.get("tone") if person else None) or "friendly"
+        tone = (person.prefs.get(_TONE_PREF_KEY) if person else None) or _DEFAULT_TONE
         lines = [f"You are a family home assistant speaking with {who}.",
                  f"Use a {tone} tone. Keep replies short and spoken-friendly."]
         if facts:

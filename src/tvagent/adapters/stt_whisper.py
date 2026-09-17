@@ -5,10 +5,11 @@ import numpy as np
 from tvagent.core.models import AudioClip
 
 _PCM_MAX = 32768.0
+_MODEL_SIZE = "base"
 
 
 class WhisperSTT:
-    def __init__(self, model_size: str = "base", _model: Any = None) -> None:
+    def __init__(self, model_size: str = _MODEL_SIZE, _model: Any = None) -> None:
         if _model is None:
             import faster_whisper  # noqa: PLC0415 -- lazy
             fw: Any = faster_whisper
