@@ -17,7 +17,8 @@
 - **TDD always:** write the failing test, watch it fail, minimal impl, watch it pass, commit. One behavior per test.
 - **No non-commercial model weights.** Only MIT/Apache/CC-BY backends wired in; each recorded in `LICENSES.md` (L1). Never wire ChatTTS (CC-BY-NC) or an unread Qwen license.
 - **Claude:** model id `claude-opus-5` via the `anthropic` SDK. For voice latency, use `output_config={"effort": "low"}` (tuning knob, documented) — do NOT switch model without the user's say-so. Read the `claude-api` skill before editing the LLM adapter.
-- **Python:** 3.11+. Formatting/lint per `ruff` defaults. Package under `src/tvagent/`.
+- **Python:** 3.11+. Package under `src/tvagent/`.
+- **Lint/type gate (added after Task 10):** `ruff check .` and `pyright` MUST pass clean. Ruff runs a comprehensive rule set including `PLR2004` (magic values) — `src/` app code has NO magic numbers/strings; every literal is a named constant. Pyright runs in `strict` mode. Tasks 11–13 must satisfy this gate; Task 13's test gate runs both.
 
 ---
 
@@ -1489,10 +1490,13 @@ if __name__ == "__main__":
 Run (only if key present): `python scripts/verify_live.py`
 Expected with key + fixture: routes through `run_once()`, prints HEARD/REPLIED/RENDERED/LATENCY, asserts reply + render + persisted turn, prints `LIVE E2E PASS` (F6, F8, F9, Q1). With key but no fixture: prints FAIL and exits **1** (never a silent skip). Without key: prints SKIP, exits 0.
 
-- [ ] **Step 3: Run the full test gate**
+- [ ] **Step 3: Run the full test gate + lint/type gate**
 
 Run: `pytest -v`
 Expected: all unit + component + isolation + e2e-fakes tests PASS (component/live SKIP where hardware/key/fixtures absent).
+
+Run: `ruff check .` and `pyright`
+Expected: both clean — zero errors. Ruff includes `PLR2004`, so any magic number/string in `src/` fails the gate.
 
 - [ ] **Step 4: Map every spec §8 criterion to its check and record results**
 

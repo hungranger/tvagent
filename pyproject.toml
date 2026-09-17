@@ -1,0 +1,76 @@
+[project]
+name = "tvagent"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff==0.15.7", "pyright", "pytest-cov", "pre-commit"]
+run = ["anthropic", "faster-whisper", "piper-tts", "speechbrain", "openwakeword", "webrtcvad", "websockets", "sounddevice", "numpy"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+markers = ["component: real-backend tests needing models/audio fixtures"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "PL", "RUF", "N", "C4", "PTH"]
+# PLR2004 = magic value used in comparison — this is the "no magic number/string" rule.
+
+[tool.ruff.lint.per-file-ignores]
+# Tests may use literals freely (assertions, fixtures) and don't need the magic-value rule.
+"tests/**" = ["PLR2004", "S101"]
+"scripts/**" = ["PLR2004"]
+
+[tool.pyright]
+include = ["src", "tests", "scripts"]
+pythonVersion = "3.11"
+typeCheckingMode = "strict"
+# Optional runtime backends (anthropic, faster_whisper, piper, speechbrain, torch,
+# webrtcvad, sounddevice, openwakeword, numpy, websockets) are not installed in the
+# dev/type-check environment and several ship no type stubs. Do not fail on them.
+reportMissingImports = "none"
+reportMissingModuleSource = "none"
+
+[tool.mutmut]
+source_paths = ["src/tvagent/"]
+pytest_add_cli_args_test_selection = ["tests/"]
+# Mutate only lines pytest actually exercises, and reuse the [tool.coverage.report]
+# exclude_also patterns above (mutmut applies coverage.py's excluded-lines analysis
+# unconditionally) to skip hardware/IO-only code with no CI-runnable tests: the real
+# _default_* embedders/synth/play, MicSource, record_seconds, WebDisplay._serve,
+# lazy heavy-dep construction paths, and config.py's real-adapter factories. Everything
+# else (orchestrator, memory_json, config's build_orchestrator/_get dispatch, speakerid
+# cosine/identify, audio_vad VadCapture silence logic, llm
+# text-extraction, tts empty-text guard, display state_to_json) stays mutated.
+mutate_only_covered_lines = true
+
+[tool.coverage.run]
+source = ["src/tvagent"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 92
+exclude_also = [
+    "if __name__ == .__main__.:",
+    "def _default_",              # hardware-backed default synth/play/embed paths
+    "class MicSource",            # live mic source, no CI coverage
+    "def record_seconds",         # live mic capture
+    "def _serve",                 # websocket server thread
+    "class WebDisplay",           # live websocket display server, no CI coverage
+    "if client is None:",         # lazy real anthropic client construction
+    "if _model is None:",         # lazy real faster-whisper model construction
+    "if self._detector is None:", # lazy real openwakeword model construction
+    "if self._source is None:",   # lazy real mic source construction
+    "def main\\(\\) -> None:",     # enroll.py CLI glue: mic capture + real embedding model
+    "def _(memory|wake|capture|speaker|stt|llm|tts|display)\\(",  # config.py real-adapter factories, tested via overrides
+]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
