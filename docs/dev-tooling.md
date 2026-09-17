@@ -13,7 +13,7 @@ Git hooks run through the [pre-commit](https://pre-commit.com) framework, staged
 | pre-push | pytest-cov | **project venv** | tests + coverage floor (`[tool.coverage]`) |
 | pre-push | pip-audit | **project venv (`uv`)** | dependency CVE scan (audits `uv.lock`) |
 | pre-push | uv lock --check | **project venv (`uv`)** | fails if `uv.lock` drifted from `pyproject.toml` (non-mutating — does not touch the venv) |
-| pre-push | semgrep | isolated (`language: python`) | `p/python` + `p/security-audit` rule sets |
+| pre-push | semgrep | isolated (official `semgrep/semgrep` repo hook, rev-pinned) | `p/python` + `p/security-audit` rule sets |
 | pre-push | ruff-arg | isolated (repo hook, `ruff-pre-commit` again) | unused function/lambda args (`ARG`), not in the main `[tool.ruff.lint] select` so it stays out of pre-commit |
 | pre-push | vulture | isolated (`language: python`) | dead functions/classes/methods/attrs/variables, gated by `.vulture_allowlist.py`. Runs at `--min-confidence 60` — vulture scores unused functions/classes/attrs/variables at exactly 60%, so `80` (the default-ish "safe" threshold) would only catch unused imports (90%) and unreachable code (100%) and never fire on dead functions, which defeats the point of adding vulture. `60` is noisier (more false positives, e.g. dataclass fields round-tripped through serialization); triage misses into `.vulture_allowlist.py`, don't raise the threshold to silence them |
 
@@ -37,13 +37,12 @@ running `lint-imports` from a fresh `uv venv` with only `import-linter`
 installed and `PATH` stripped to `/usr/bin:/bin` — it still resolved and
 passed all 3 contracts.
 
-`semgrep` uses a `language: python` local hook (pinned via
-`additional_dependencies`) rather than the official `semgrep-pre-commit`
-repo hook, since the version already in use here (1.176.0, a Homebrew
-install) isn't tracked in `uv.lock`/`pyproject.toml` — pinning the local
-hook to that exact version keeps behavior unchanged. It still downloads the
-`p/python`/`p/security-audit` rulesets over the network at run time, same as
-before.
+`semgrep` uses the official `https://github.com/semgrep/semgrep` pre-commit
+repo hook, pinned by `rev: v1.176.0` — same pattern as `ruff-pre-commit` and
+`gitleaks` above. `rev` is the single source of truth for the version; there
+is no separate `additional_dependencies` pin to drift out of sync. It still
+downloads the `p/python`/`p/security-audit` rulesets over the network at run
+time, same as before.
 
 `[tool.importlinter]` (root_package `tvagent`) enforces three contracts: a
 `forbidden` contract keeping `tvagent.core` free of adapter/config/app/shared

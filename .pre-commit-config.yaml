@@ -40,6 +40,21 @@ repos:
       - id: gitleaks
         stages: [pre-commit]
 
+  - repo: https://github.com/semgrep/semgrep
+    rev: v1.176.0
+    hooks:
+      - id: semgrep
+        name: semgrep (python + security-audit)
+        # Isolated env: pre-commit pip-installs semgrep==1.176.0 (this repo's
+        # own rev) into its own venv, no project deps needed. `rev` above is
+        # the single source of truth for the pinned version — nothing to
+        # keep in sync elsewhere. Still downloads the p/python and
+        # p/security-audit rulesets over the network at run time.
+        args: [--config, p/python, --config, p/security-audit, --error]
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
   - repo: local
     hooks:
       - id: import-linter
@@ -88,18 +103,6 @@ repos:
         # Needs `uv` on PATH.
         entry: uv lock --check
         language: system
-        pass_filenames: false
-        always_run: true
-        stages: [pre-push]
-
-      - id: semgrep
-        name: semgrep (python + security-audit)
-        # Isolated env: semgrep is a standalone scanner, no project deps
-        # needed. It still downloads the p/python and p/security-audit
-        # rulesets over the network at run time, same as before.
-        entry: semgrep --config p/python --config p/security-audit --error
-        language: python
-        additional_dependencies: ["semgrep==1.176.0"]
         pass_filenames: false
         always_run: true
         stages: [pre-push]
