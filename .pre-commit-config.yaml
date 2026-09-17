@@ -1,7 +1,10 @@
 # Stage map:
-#   pre-commit (fast, every commit): ruff lint + format, gitleaks secret scan,
-#               import-linter. Kept TDD-RED-friendly: a commit that
-#               references a not-yet-created symbol must not be blocked here.
+#   pre-commit (fast, every commit): basic hygiene (trailing-whitespace,
+#               end-of-file-fixer, check-yaml, check-toml,
+#               check-merge-conflict, check-added-large-files), ruff lint +
+#               format, gitleaks secret scan, import-linter. Kept
+#               TDD-RED-friendly: a commit that references a not-yet-created
+#               symbol must not be blocked here.
 #   pre-push   (heavier, before push): pyright (strict), pytest + coverage,
 #               pip-audit, uv lockfile drift check, semgrep, ruff ARG
 #               (unused args), vulture (dead code).
@@ -20,6 +23,24 @@
 default_install_hook_types: [pre-commit, pre-push]
 
 repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        stages: [pre-commit]
+        exclude: ^\.vulture_allowlist\.py$
+      - id: end-of-file-fixer
+        stages: [pre-commit]
+        exclude: ^\.vulture_allowlist\.py$
+      - id: check-yaml
+        stages: [pre-commit]
+      - id: check-toml
+        stages: [pre-commit]
+      - id: check-merge-conflict
+        stages: [pre-commit]
+      - id: check-added-large-files
+        stages: [pre-commit]
+
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.7
     hooks:
@@ -79,8 +100,11 @@ repos:
 
       - id: pytest-cov
         name: pytest + coverage
-        # Needs the project's own venv: runs the app + its deps.
-        entry: pytest --cov --cov-report=term-missing --cov-fail-under=92
+        # Needs the project's own venv: runs the app + its deps. Coverage
+        # floor lives only in [tool.coverage.report] fail_under (pytest-cov
+        # honors it from config with no --cov-fail-under flag needed —
+        # verified empirically: bumping the config value alone fails the run).
+        entry: pytest --cov --cov-report=term-missing
         language: system
         pass_filenames: false
         always_run: true

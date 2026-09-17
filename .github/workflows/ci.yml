@@ -1,0 +1,38 @@
+name: ci
+
+# Server-side enforcement of the SAME gate as the local pre-commit/pre-push
+# hooks. Single source of truth: this job runs `pre-commit run` against
+# .pre-commit-config.yaml rather than re-listing ruff/pyright/pytest/etc
+# here — keep tool config changes in .pre-commit-config.yaml / pyproject.toml
+# and this workflow picks them up automatically.
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+jobs:
+  quality-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: astral-sh/setup-uv@v4
+
+      - name: Install project + test deps
+        # Matches nightly-mutation.yml: numpy is a top-level import in
+        # stt/speakerid modules but isn't a `dev` dependency.
+        run: pip install -e ".[dev]" numpy
+
+      - name: Install pre-commit
+        run: pip install pre-commit
+
+      - name: Run pre-commit (pre-commit stage)
+        run: pre-commit run --all-files --hook-stage pre-commit --show-diff-on-failure
+
+      - name: Run pre-commit (pre-push stage)
+        run: pre-commit run --all-files --hook-stage pre-push --show-diff-on-failure

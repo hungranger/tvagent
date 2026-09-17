@@ -5,12 +5,13 @@ Git hooks run through the [pre-commit](https://pre-commit.com) framework, staged
 
 | Stage | Hook | Env | What it checks |
 |---|---|---|---|
+| pre-commit | trailing-whitespace, end-of-file-fixer, check-yaml, check-toml, check-merge-conflict, check-added-large-files | isolated (`pre-commit/pre-commit-hooks` repo hook) | basic hygiene; `.vulture_allowlist.py` excluded from the two fixers since it's a generated whitelist stub |
 | pre-commit | ruff | isolated (repo hook) | lint (`[tool.ruff]` in `pyproject.toml`), cyclomatic complexity C901 (max-complexity 10) |
 | pre-commit | ruff-format | isolated (repo hook) | formatting |
 | pre-commit | gitleaks | isolated (repo hook) | secret scan of the staged diff |
 | pre-commit | import-linter | isolated (`language: python`) | hexagonal architecture contracts (`[tool.importlinter]`), fast static import-graph check on `src`, safe pre-commit |
 | pre-push | pyright | **project venv** | strict type check (`[tool.pyright]`) |
-| pre-push | pytest-cov | **project venv** | tests + coverage floor (`[tool.coverage]`) |
+| pre-push | pytest-cov | **project venv** | tests + coverage floor (`[tool.coverage.report] fail_under = 92`, single source — see Coverage floor below) |
 | pre-push | pip-audit | **project venv (`uv`)** | dependency CVE scan (audits `uv.lock`) |
 | pre-push | uv lock --check | **project venv (`uv`)** | fails if `uv.lock` drifted from `pyproject.toml` (non-mutating — does not touch the venv) |
 | pre-push | semgrep | isolated (official `semgrep/semgrep` repo hook, rev-pinned) | `p/python` + `p/security-audit` rule sets |
@@ -63,6 +64,51 @@ runtime backends (sounddevice, webrtcvad, speechbrain, faster_whisper, openwakew
 ship no stubs, so this stays a visible warning rather than a silent `"none"` — the gate
 still fails only on real type errors, not on these.
 
+## Coverage floor: single source
+
+The 92% coverage floor lives in exactly one place: `[tool.coverage.report] fail_under = 92`
+in `pyproject.toml`. The pre-push `pytest-cov` hook runs plain
+`pytest --cov --cov-report=term-missing`, with no `--cov-fail-under` flag — pytest-cov
+honors `fail_under` from config even when the flag is absent.
+
+Verified empirically (not assumed): temporarily bumping the config value alone (no CLI
+flag) above the real coverage number makes `pytest --cov` exit 1 and print
+`FAIL Required test coverage of 97.0% not reached. Total coverage: 96.42%`; restoring
+`fail_under = 92` makes it pass again at the same 96.42%. So a single config edit is
+guaranteed to move both what CI/hooks enforce and what's reported — there's no second
+number that can drift out of sync.
+
+## CI (`.github/workflows/ci.yml`)
+
+Runs on every pull request and on push to `master`. It does **not** re-list ruff/pyright/
+pytest/etc — it installs the project (`pip install -e ".[dev]" numpy`, matching
+`nightly-mutation.yml`) plus `pre-commit`, then runs:
+
+```
+pre-commit run --all-files --hook-stage pre-commit --show-diff-on-failure
+pre-commit run --all-files --hook-stage pre-push --show-diff-on-failure
+```
+
+against the same `.pre-commit-config.yaml` the local hooks use — `.pre-commit-config.yaml`
+is the single source of truth for which tools run and with what config; there is nothing
+to keep in sync between local hooks and CI. On a clean `ubuntu-latest` runner, `pip-audit`
+and `semgrep` also get real network access, so CI validates them for real even when they're
+flaky in a locked-down local sandbox.
+
+**Branch protection:** to make this an actual merge gate, require the `quality-gate` check
+from this workflow in the repo's branch protection rules for `master`.
+
+## Dependabot (`.github/dependabot.yml`)
+
+Weekly updates for the `github-actions` ecosystem (workflow action pins) and the `pip`
+ecosystem (this project's own dependencies, resolved from `pyproject.toml`).
+
+Dependabot does **not** see the pinned `rev:` values inside `.pre-commit-config.yaml`
+(`ruff-pre-commit`, `gitleaks`, `semgrep`, `pre-commit-hooks`) — those aren't a supported
+ecosystem. `.github/workflows/pre-commit-autoupdate.yml` covers that gap: it runs
+`pre-commit autoupdate` weekly and opens a PR with any hook-rev bumps for review (never
+auto-merged).
+
 ## Reuse in another project
 
 1. Copy `.pre-commit-config.yaml`, `.gitleaks.toml`, and the `[tool.ruff]`,
@@ -86,4 +132,6 @@ still fails only on real type errors, not on these.
   wherever those tools live) must be on `PATH` when pushing. Every other hook
   runs in a pre-commit-managed isolated env, so `git push` with no venv
   active still runs those.
-- Coverage floor: see `task-hook-report.md` for how it was measured and set.
+- Coverage floor: single-sourced in `[tool.coverage.report] fail_under`, see
+  "Coverage floor: single source" above. `task-hook-report.md` has the original
+  measurement that set the number at 92.
