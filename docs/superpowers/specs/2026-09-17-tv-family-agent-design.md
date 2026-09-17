@@ -149,14 +149,49 @@ Enrollment: each family member records ~30s once to register a voice embedding. 
 
 ## 8. Success criteria (v1 done when)
 
-1. Say the wake phrase at the PC mic -> agent captures the utterance.
-2. It correctly identifies which enrolled family member spoke (and labels unknown voices "guest").
-3. It transcribes what was said.
-4. It answers via Claude with a prompt tuned to that person and their memory.
-5. It speaks the reply (Piper) AND shows it in the browser window.
-6. It persists the turn; a later turn by the same person reflects remembered facts.
-7. Swapping any single adapter (e.g. TTS impl) requires touching only that adapter + config.
-8. Full test suite (fakes + component tests incl. real speaker-ID samples) passes.
+Each criterion maps to a concrete, runnable check. The implementation plan's final task must verify every row against a real end-to-end run, not just unit/fake tests.
+
+### 8.1 Functional — the turn works end to end
+| # | Criterion | Concrete check |
+|---|-----------|----------------|
+| F1 | Wake word gates the mic | Speaking the wake phrase fires exactly one capture; ordinary speech/noise does not (measure false-fire rate on a noise fixture). |
+| F2 | Utterance captured to silence | After wake, VAD ends capture on trailing silence; produces a bounded `AudioClip`. |
+| F3 | Speaker identified | Enrolled member's clip -> correct `PersonId` above threshold; stranger's clip -> `GUEST`. |
+| F4 | Speech transcribed | Known clip -> text within a set word-error tolerance. |
+| F5 | Prompt tuned to person | LLM prompt includes the identified person's profile + loaded memory (assert on built prompt). |
+| F6 | Reply generated | Claude returns a non-empty reply for a real call (gated on `ANTHROPIC_API_KEY` present). |
+| F7 | Reply spoken | TTS produces audible/output audio for the reply text. |
+| F8 | Reply shown | Browser window renders `{person, text}` (and card when present). |
+| F9 | Turn persisted | Turn written to the person's memory; readable next turn. |
+| F10 | Memory recall | A fact stated in one turn is reflected in a later same-person turn's prompt/answer. |
+| F11 | Guest isolation | GUEST turns do not read or write any enrolled person's memory. |
+| F12 | Enrollment flow | A new voice can be enrolled (~30s) and is recognized on the next turn. |
+
+### 8.2 Quality — latency & accuracy budgets (measured, not assumed)
+| # | Criterion | Target (POC) |
+|---|-----------|--------------|
+| Q1 | End-to-end latency: end-of-speech -> first audio out | measured + recorded; document actual, target < ~3s on PC |
+| Q2 | Speaker-ID accuracy on real family samples | correct-person rate + stranger-rejection rate recorded; threshold tuned from this |
+| Q3 | Wake-word false-fire rate | measured on a noise/ambient fixture; recorded |
+
+### 8.3 Modularity / architecture (the user's core requirement)
+| # | Criterion | Concrete check |
+|---|-----------|----------------|
+| M1 | Every component behind a port | Orchestrator imports only interfaces; no direct backend import (grep/lint check). |
+| M2 | Adapter swap is one-file + config | Swapping one adapter (e.g. Piper -> another TTS) changes only that adapter + config; test suite still passes. |
+| M3 | Fakes for every port | Each port has a fake impl; core test runs with zero hardware and zero paid API calls. |
+| M4 | POC->HW seam isolated | Only edge adapters (mic, display) are marked hardware-specific; core/brain/memory have no device imports. |
+
+### 8.4 Licensing
+| # | Criterion | Concrete check |
+|---|-----------|----------------|
+| L1 | No non-commercial weights | No `-NC`/research-only model wired in; each active model's license recorded in a `LICENSES.md`. |
+
+### 8.5 Test gate
+| # | Criterion | Concrete check |
+|---|-----------|----------------|
+| T1 | Full suite green | Fakes + component tests (incl. real speaker-ID samples) + orchestrator e2e-with-fakes all pass. |
+| T2 | Real e2e proof | One live run (real mic clip -> real STT -> real Claude -> real TTS -> real render -> real persisted turn), gated on API key; output captured as evidence. |
 
 ---
 
