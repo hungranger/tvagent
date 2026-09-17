@@ -14,7 +14,7 @@ def main() -> None:
     name = sys.argv[1] if len(sys.argv) > 1 else input("Name: ")
     clip = record_seconds(_ENROLL_SECONDS)
     sid = EcapaSpeakerID(JsonMemory(pathlib.Path("data/memory")))
-    p = sid.enroll(name, clip)
+    p = sid.enroll(name, [clip])
     print(f"enrolled {p.name} ({p.id})")
 
 
