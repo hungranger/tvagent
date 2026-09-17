@@ -11,4 +11,4 @@ Verify each before any commercial launch. Code of huggingface/speech-to-speech i
 | Wake word | openWakeWord | Apache-2.0 | yes |
 | Brain | Claude API (claude-opus-5) | commercial via Anthropic API terms | yes |
 
-Do NOT add ChatTTS (CC-BY-4.0 clause 4) or any research-only weights.
+Do NOT add ChatTTS (CC-BY-NC) or any -NC / research-only weight.
