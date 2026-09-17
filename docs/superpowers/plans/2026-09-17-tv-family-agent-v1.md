@@ -545,8 +545,12 @@ Expected: PASS (all three).
 import ast, pathlib
 
 def test_core_imports_only_core():
-    core_dir = pathlib.Path("src/tvagent/core")
-    for pyfile in core_dir.glob("*.py"):
+    # anchor off this file, not CWD, so it can't vacuously pass from another dir
+    repo = pathlib.Path(__file__).resolve().parent.parent
+    core_dir = repo / "src" / "tvagent" / "core"
+    files = list(core_dir.glob("*.py"))
+    assert len(files) >= 3, f"isolation test found no core files (looked in {core_dir})"
+    for pyfile in files:
         tree = ast.parse(pyfile.read_text())
         for node in ast.walk(tree):
             mod = None
@@ -662,6 +666,20 @@ git commit -m "feat: Claude LLM adapter (opus-5, low effort, injectable client)"
 **Interfaces:**
 - Consumes: `STT` protocol, `AudioClip`.
 - Produces: `WhisperSTT(model_size="base")` implementing `transcribe`. Injectable `_model` for a stub test; a real component test gated on the lib being installed.
+
+- [ ] **Step 0: Record the audio fixture (required for the live proof in Task 13)**
+
+Record a ~2s mono 16kHz WAV of yourself saying "hello there" to `tests/fixtures/hello.wav`:
+
+```bash
+mkdir -p tests/fixtures
+python -c "import sounddevice as sd, wave; sr=16000; \
+d=sd.rec(int(2*sr),samplerate=sr,channels=1,dtype='int16'); sd.wait(); \
+w=wave.open('tests/fixtures/hello.wav','wb'); w.setnchannels(1); w.setsampwidth(2); \
+w.setframerate(sr); w.writeframes(d.tobytes()); w.close(); print('saved')"
+```
+
+This fixture gates the component test below and the live e2e in Task 13; without it Task 13's live proof fails when a key is present (it must not silently skip).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -893,6 +911,17 @@ def test_capture_stops_after_trailing_silence():
     clip = cap.capture()
     assert clip.samples == b"abc"          # F2: bounded capture to silence
     assert clip.sample_rate == 16000
+
+def test_wakeword_returns_only_after_detection():
+    # F1: wait() must not return until a frame scores above threshold
+    from tvagent.adapters.wakeword_oww import OwwWakeWord
+    import numpy as np
+    frames = _ScriptedSource([(np.zeros(1, dtype=np.int16).tobytes(), False)] * 3)
+    scores = iter([{"w": 0.1}, {"w": 0.2}, {"w": 0.9}])  # fires on 3rd frame
+    class _Det:
+        def predict(self, arr): return next(scores)
+    ww = OwwWakeWord(_detector=_Det(), _source=frames)
+    ww.wait()  # returns (does not hang / raise) exactly when score>0.5 arrives
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1367,61 +1396,90 @@ This is the whole-feature gate. It maps every success criterion (spec §8) to a 
 ```python
 # tests/test_e2e_fakes.py
 from tvagent.config import build_orchestrator
-from tvagent.core.models import AudioClip, Person, Fact
+from tvagent.core.models import AudioClip, Person
 from tests.fakes import (FakeWakeWord, FakeAudioCapture, FakeSpeakerID, FakeSTT,
                          FakeLLM, FakeTTS, FakeDisplay)
 from tvagent.adapters.memory_json import JsonMemory
 
-def test_e2e_recall_and_render(tmp_path):
+def test_e2e_turn_recall_and_render(tmp_path):
+    # F10: a detail from an earlier turn is reflected in a later same-person turn.
+    # The orchestrator writes each turn and loads recent_turns into the next prompt,
+    # so turn 2's system prompt must carry turn 1's content (real save->load path,
+    # not a pre-seeded fact).
     mem = JsonMemory(tmp_path)
     mem.upsert_person(Person(id="dad", name="Dad", embedding=[0.1], prefs={"tone":"adult"}))
-    mem.add_fact(Fact(person_id="dad", text="standup 9am", created_at=1.0))
     clip = AudioClip(samples=b"x", sample_rate=16000)
-    llm, tts, disp = FakeLLM("At 9."), FakeTTS(), FakeDisplay()
-    orch = build_orchestrator({
-        "wake": FakeWakeWord(), "capture": FakeAudioCapture(clip),
-        "speaker": FakeSpeakerID("dad"), "stt": FakeSTT("when is standup"),
-        "llm": llm, "tts": tts, "memory": mem, "display": disp,
-    })
-    turn = orch.run_once()
-    assert "standup 9am" in llm.last_system      # recall
-    assert tts.spoken == ["At 9."] and disp.last.text == "At 9."  # speak + show
-    assert mem.recent_turns("dad", 1)[0].replied == "At 9."       # persisted
+    llm, tts, disp = FakeLLM("Noted."), FakeTTS(), FakeDisplay()
+    def orch(said):
+        return build_orchestrator({
+            "wake": FakeWakeWord(), "capture": FakeAudioCapture(clip),
+            "speaker": FakeSpeakerID("dad"), "stt": FakeSTT(said),
+            "llm": llm, "tts": tts, "memory": mem, "display": disp,
+        })
+    orch("my dog is named Rex").run_once()            # turn 1 persisted
+    turn2 = orch("what did I just tell you").run_once()  # turn 2 loads history
+    assert "Rex" in llm.last_system                  # F10: earlier turn recalled
+    assert tts.spoken[-1] == "Noted." and disp.last.text == "Noted."  # F7/F8
+    assert mem.recent_turns("dad", 2)[0].said == "my dog is named Rex"  # F9 persist
 ```
 
-Run: `pytest tests/test_e2e_fakes.py -v` → Expected: PASS.
+Run: `pytest tests/test_e2e_fakes.py -v` → Expected: PASS (proves F7/F8/F9/F10 through the real save→load path).
 
 - [ ] **Step 2: Live E2E proof script (real STT→Claude→TTS→memory), key-gated**
 
 ```python
 # scripts/verify_live.py
-"""Real end-to-end proof. Uses recorded fixture audio (no live mic needed),
-real Whisper, real Claude, real Piper, real JSON memory. Gated on ANTHROPIC_API_KEY."""
+"""Real end-to-end proof through the ACTUAL Orchestrator.run_once().
+Only the two edge adapters are overridden: wake (fires once) and capture
+(returns fixture audio instead of a live mic). Everything else is real:
+real SpeakerID, real Whisper, real Claude, real Piper, real JSON memory,
+real Display. Proves the full spine incl. render + persisted turn (T2).
+Gated on ANTHROPIC_API_KEY (checked by name; value never printed)."""
 import os, sys, time, wave, pathlib
-from tvagent.core.models import AudioClip
-from tvagent.adapters.stt_whisper import WhisperSTT
-from tvagent.adapters.llm_claude import ClaudeLLM
-from tvagent.adapters.tts_piper import PiperTTS
+from tvagent.core.models import AudioClip, Person
+from tvagent.config import build_orchestrator
 from tvagent.adapters.memory_json import JsonMemory
-from tvagent.core.models import Person
+
+class _OnceWake:
+    def __init__(self): self._done = False
+    def wait(self):
+        if self._done: raise SystemExit
+        self._done = True
+
+class _FixtureCapture:
+    def __init__(self, clip): self._clip = clip
+    def capture(self): return self._clip
+
+class _RecordingDisplay:
+    def __init__(self): self.last = None
+    def render(self, state): self.last = state
 
 def main():
     if not os.environ.get("ANTHROPIC_API_KEY"):
         print("SKIP live e2e: ANTHROPIC_API_KEY not set"); return 0
     fx = pathlib.Path("tests/fixtures/hello.wav")
     if not fx.exists():
-        print("SKIP live e2e: record tests/fixtures/hello.wav first"); return 0
+        # key present but no fixture -> the live proof cannot run; do NOT pass silently
+        print("FAIL live e2e: ANTHROPIC_API_KEY set but tests/fixtures/hello.wav missing "
+              "(record it, see Task 6 Step 0)"); return 1
     with wave.open(str(fx)) as w:
         clip = AudioClip(samples=w.readframes(w.getnframes()), sample_rate=w.getframerate())
-    t0 = time.time()
-    said = WhisperSTT(model_size="base").transcribe(clip)
     mem = JsonMemory(pathlib.Path("data/verify"))
     mem.upsert_person(Person(id="tester", name="Tester", embedding=[0.0], prefs={}))
-    reply = ClaudeLLM().respond("You are a family assistant talking to Tester.", said, [])
-    PiperTTS().speak(reply)
+    disp = _RecordingDisplay()
+    orch = build_orchestrator({
+        "wake": _OnceWake(), "capture": _FixtureCapture(clip),
+        "memory": mem, "display": disp,
+    })  # speaker, stt, llm, tts are all REAL
+    t0 = time.time()
+    turn = orch.run_once()
     latency = time.time() - t0
-    print(f"HEARD: {said!r}\nREPLIED: {reply!r}\nEND-TO-END LATENCY: {latency:.2f}s")
-    assert reply.strip(), "empty reply"
+    print(f"HEARD: {turn.said!r}\nREPLIED: {turn.replied!r}\n"
+          f"RENDERED: {disp.last.text!r}\nEND-TO-END LATENCY: {latency:.2f}s")
+    assert turn.replied.strip(), "empty reply"                          # F6
+    assert disp.last is not None and disp.last.text == turn.replied     # F8 render
+    assert mem.recent_turns(turn.person_id, 1)[0].replied == turn.replied  # F9 persist
+    print("LIVE E2E PASS")
     return 0
 
 if __name__ == "__main__":
@@ -1429,7 +1487,7 @@ if __name__ == "__main__":
 ```
 
 Run (only if key present): `python scripts/verify_live.py`
-Expected with key + fixture: prints HEARD/REPLIED/LATENCY (Q1), non-empty reply (F6). Without key: prints SKIP and exits 0.
+Expected with key + fixture: routes through `run_once()`, prints HEARD/REPLIED/RENDERED/LATENCY, asserts reply + render + persisted turn, prints `LIVE E2E PASS` (F6, F8, F9, Q1). With key but no fixture: prints FAIL and exits **1** (never a silent skip). Without key: prints SKIP, exits 0.
 
 - [ ] **Step 3: Run the full test gate**
 
@@ -1442,7 +1500,7 @@ Create `docs/superpowers/VERIFICATION.md` with a row per criterion:
 
 | Criterion | Where verified | Result |
 |-----------|----------------|--------|
-| F1 wake gates mic | `test_audio_vad` + manual mic run | … |
+| F1 wake gates mic | `test_wakeword_returns_only_after_detection` + manual mic run | … |
 | F2 capture to silence | `test_capture_stops_after_trailing_silence` | … |
 | F3 speaker id / guest | `test_speakerid.py` (match + stranger) | … |
 | F4 transcribe | `test_stt_whisper` component + live | … |
@@ -1451,19 +1509,19 @@ Create `docs/superpowers/VERIFICATION.md` with a row per criterion:
 | F7 spoken | orchestrator + tts tests | … |
 | F8 shown | orchestrator + display tests | … |
 | F9 persisted | orchestrator + memory tests | … |
-| F10 recall | `test_e2e_recall_and_render` | … |
+| F10 recall (earlier turn) | `test_e2e_turn_recall_and_render` (real save→load) | … |
 | F11 guest isolation | `test_guest_does_not_...` + memory test | … |
 | F12 enrollment | `enroll.py` manual run + speakerid test | … |
 | Q1 latency | `verify_live.py` output | … |
 | Q2 speaker accuracy | manual run w/ real family samples | … |
 | Q3 false-fire rate | manual noise-fixture run | … |
 | M1 ports-only core | `test_core_isolation` | … |
-| M2 one-file swap | `test_config` swap test | … |
+| M2 swap by config/one file | `test_config` DI-override + `test_core_isolation` (core has no backend imports, so a swap touches only the adapter + config) | … |
 | M3 fakes everywhere | `test_fakes` + `test_config` | … |
 | M4 POC→HW seam | manual review: only audio_vad/display are device-specific | … |
 | L1 no NC weights | `test_licenses` | … |
 | T1 full suite green | `pytest -v` | … |
-| T2 real e2e proof | `verify_live.py` | … |
+| T2 real e2e proof (through run_once) | `verify_live.py` — real speaker/stt/llm/tts/memory/display, asserts reply+render+persist | … |
 
 Fill each Result from an actual run. End the file with a **"What I did NOT verify"** list — e.g. Q2/Q3 need real family voice samples the developer must record; latency measured on dev PC only, not target mini-PC; live proof used fixture audio, not a live mic capture.
 

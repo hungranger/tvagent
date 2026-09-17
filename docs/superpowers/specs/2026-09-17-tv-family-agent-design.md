@@ -163,7 +163,7 @@ Each criterion maps to a concrete, runnable check. The implementation plan's fin
 | F7 | Reply spoken | TTS produces audible/output audio for the reply text. |
 | F8 | Reply shown | Browser window renders `{person, text}` (and card when present). |
 | F9 | Turn persisted | Turn written to the person's memory; readable next turn. |
-| F10 | Memory recall | A fact stated in one turn is reflected in a later same-person turn's prompt/answer. |
+| F10 | Memory recall | A detail from an earlier turn is reflected in a later same-person turn's prompt (recent-turn history load; durable `Fact` extraction is a later phase). |
 | F11 | Guest isolation | GUEST turns do not read or write any enrolled person's memory. |
 | F12 | Enrollment flow | A new voice can be enrolled (~30s) and is recognized on the next turn. |
 
