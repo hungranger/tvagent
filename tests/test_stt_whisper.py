@@ -31,7 +31,7 @@ def test_transcribe_joins_segments():
     assert out == "hello there"  # pins the " " join separator across segments
     audio, kw = model.calls[0]
     assert kw == {"language": "en"}
-    assert np.allclose(audio, [0.0, 0.5])  # pins int16->float32 scaling by /_PCM_MAX
+    assert audio.tolist() == [0.0, 0.5]  # pins int16->float32 scaling by /_PCM_MAX
     assert audio.dtype == np.float32
 
 

@@ -74,7 +74,7 @@ def test_wakeword_returns_only_after_detection():
     ww = OwwWakeWord(_detector=det, _source=frames)
     ww.wait()  # returns (does not hang / raise) exactly when score>0.5 arrives
     assert len(det.calls) == 3
-    assert np.array_equal(det.calls[0], np.frombuffer(frame, dtype=np.int16))
+    assert det.calls[0].tobytes() == frame  # predict() got the real frame, not a stand-in
 
 
 def test_wakeword_does_not_fire_exactly_at_threshold():
