@@ -5,7 +5,7 @@ requires-python = ">=3.11"
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["pytest", "ruff==0.15.7", "pyright", "pytest-cov", "pre-commit", "vulture", "import-linter"]
+dev = ["pytest", "ruff==0.15.7", "pyright", "pytest-cov", "pre-commit", "vulture", "import-linter", "pip-audit"]
 run = ["anthropic", "faster-whisper", "piper-tts", "speechbrain", "openwakeword", "webrtcvad", "websockets", "sounddevice", "numpy"]
 
 [tool.pytest.ini_options]
