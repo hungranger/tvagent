@@ -10,9 +10,15 @@ _TONE_PREF_KEY = "tone"
 
 class Orchestrator:
     def __init__(  # noqa: PLR0913 -- ports: one collaborator per port, DI by design
-        self, wake: ports.WakeWord, capture: ports.AudioCapture,
-        speaker: ports.SpeakerID, stt: ports.STT, llm: ports.LLM,
-        tts: ports.TTS, memory: ports.MemoryStore, display: ports.Display,
+        self,
+        wake: ports.WakeWord,
+        capture: ports.AudioCapture,
+        speaker: ports.SpeakerID,
+        stt: ports.STT,
+        llm: ports.LLM,
+        tts: ports.TTS,
+        memory: ports.MemoryStore,
+        display: ports.Display,
     ) -> None:
         self.wake, self.capture, self.speaker = wake, capture, speaker
         self.stt, self.llm, self.tts = stt, llm, tts
@@ -23,13 +29,16 @@ class Orchestrator:
     ) -> tuple[str, str]:
         who = person.name if person else "an unknown guest"
         tone = (person.prefs.get(_TONE_PREF_KEY) if person else None) or _DEFAULT_TONE
-        lines = [f"You are a family home assistant speaking with {who}.",
-                 f"Use a {tone} tone. Keep replies short and spoken-friendly."]
+        lines = [
+            f"You are a family home assistant speaking with {who}.",
+            f"Use a {tone} tone. Keep replies short and spoken-friendly.",
+        ]
         if facts:
             lines.append("What you remember about them: " + "; ".join(f.text for f in facts))
         if history:
-            lines.append("Recent exchanges: " +
-                         " | ".join(f"{h.said} -> {h.replied}" for h in history))
+            lines.append(
+                "Recent exchanges: " + " | ".join(f"{h.said} -> {h.replied}" for h in history)
+            )
         return "\n".join(lines), said
 
     def run_once(self) -> Turn:

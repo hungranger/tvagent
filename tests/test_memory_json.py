@@ -14,6 +14,7 @@ def test_person_and_turn_roundtrip(tmp_path: pathlib.Path):
     recent = m.recent_turns("dad", 1)
     assert len(recent) == 1 and recent[0].said == "bye"
 
+
 def test_facts_and_guest_isolation(tmp_path: pathlib.Path):
     m = JsonMemory(tmp_path)
     m.add_fact(Fact(person_id="dad", text="standup 9am", created_at=1.0))

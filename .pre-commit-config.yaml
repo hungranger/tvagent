@@ -1,0 +1,65 @@
+# Stage map:
+#   pre-commit (fast, every commit): ruff lint + format, gitleaks secret scan.
+#   pre-push   (heavier, before push): pyright (strict), pytest + coverage,
+#               pip-audit, uv lockfile drift check, semgrep.
+# Reuse in another project: copy this file + the [tool.ruff]/[tool.pyright]/
+# [tool.coverage] blocks from pyproject.toml, then run `pre-commit install`.
+default_install_hook_types: [pre-commit, pre-push]
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.7
+    hooks:
+      - id: ruff
+        args: [--fix]
+        stages: [pre-commit]
+      - id: ruff-format
+        stages: [pre-commit]
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+        stages: [pre-commit]
+
+  - repo: local
+    hooks:
+      - id: pyright
+        name: pyright (strict)
+        entry: pyright
+        language: system
+        types: [python]
+        pass_filenames: false
+        stages: [pre-push]
+
+      - id: pytest-cov
+        name: pytest + coverage
+        entry: pytest --cov --cov-report=term-missing --cov-fail-under=92
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
+      - id: pip-audit
+        name: pip-audit (dependency CVEs)
+        entry: sh -c 'uv export --no-hashes --extra dev --extra run | pip-audit -r -'
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
+      - id: uv-lock-check
+        name: uv sync --locked (lockfile drift)
+        entry: uv sync --locked
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
+      - id: semgrep
+        name: semgrep (python + security-audit)
+        entry: semgrep --config p/python --config p/security-audit --error
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]

@@ -1,4 +1,5 @@
 """CLI: python -m tvagent.enroll "Dad"  — records ~30s and registers the voice."""
+
 import pathlib
 import sys
 
@@ -15,6 +16,7 @@ def main() -> None:
     sid = EcapaSpeakerID(JsonMemory(pathlib.Path("data/memory")))
     p = sid.enroll(name, clip)
     print(f"enrolled {p.name} ({p.id})")
+
 
 if __name__ == "__main__":
     main()

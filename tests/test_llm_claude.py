@@ -10,7 +10,9 @@ class _StubClient:
 
 
 class _StubMessages:
-    def __init__(self, outer: _StubClient) -> None: self.outer = outer
+    def __init__(self, outer: _StubClient) -> None:
+        self.outer = outer
+
     def create(self, **kwargs: Any) -> Any:
         self.outer.seen = kwargs
 
@@ -31,3 +33,14 @@ def test_respond_extracts_text_and_sends_system():
     assert out == "hi Dad"
     assert stub.seen["model"] == "claude-opus-5"
     assert stub.seen["system"] == "You are talking to Dad."
+
+
+def test_respond_includes_prior_turns_in_messages():
+    stub = _StubClient()
+    llm = ClaudeLLM(client=stub)
+    llm.respond("sys", "next question", [("first question", "first answer")])
+    assert stub.seen["messages"] == [
+        {"role": "user", "content": "first question"},
+        {"role": "assistant", "content": "first answer"},
+        {"role": "user", "content": "next question"},
+    ]

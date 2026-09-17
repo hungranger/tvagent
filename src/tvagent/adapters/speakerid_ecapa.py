@@ -33,9 +33,11 @@ class EcapaSpeakerID:
     def _default_embed(self, clip: AudioClip) -> list[float]:
         if self._model is None:
             import speechbrain.inference.speaker as sb_speaker  # noqa: PLC0415 -- lazy
+
             sb: Any = sb_speaker
             self._model = sb.EncoderClassifier.from_hparams(source=_ECAPA_SOURCE)
         import torch  # noqa: PLC0415 -- lazy
+
         th: Any = torch
         npx: Any = np
         audio = npx.frombuffer(clip.samples, dtype=np.int16).astype(np.float32) / _PCM_MAX

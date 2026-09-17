@@ -32,8 +32,6 @@ def test_real_whisper_on_fixture():
     if not f.exists():
         pytest.skip("record tests/fixtures/hello.wav saying 'hello there'")
     with wave.open(str(f)) as w:
-        clip = AudioClip(
-            samples=w.readframes(w.getnframes()), sample_rate=w.getframerate()
-        )
+        clip = AudioClip(samples=w.readframes(w.getnframes()), sample_rate=w.getframerate())
     text = WhisperSTT(model_size="base").transcribe(clip).lower()
     assert "hello" in text  # F4: within tolerance

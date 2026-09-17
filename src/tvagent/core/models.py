@@ -4,10 +4,12 @@ from typing import Any
 PersonId = str
 GUEST: PersonId = "guest"
 
+
 @dataclass
 class AudioClip:
     samples: bytes
     sample_rate: int
+
 
 @dataclass
 class Person:
@@ -16,6 +18,7 @@ class Person:
     embedding: list[float]
     prefs: dict[str, Any]
 
+
 @dataclass
 class Turn:
     person_id: str
@@ -23,11 +26,13 @@ class Turn:
     said: str
     replied: str
 
+
 @dataclass
 class Fact:
     person_id: str
     text: str
     created_at: float
+
 
 @dataclass
 class RenderState:

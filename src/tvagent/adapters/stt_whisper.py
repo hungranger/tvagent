@@ -12,6 +12,7 @@ class WhisperSTT:
     def __init__(self, model_size: str = _MODEL_SIZE, _model: Any = None) -> None:
         if _model is None:
             import faster_whisper  # noqa: PLC0415 -- lazy
+
             fw: Any = faster_whisper
             _model = fw.WhisperModel(model_size, device="cpu", compute_type="int8")
         self._model: Any = _model

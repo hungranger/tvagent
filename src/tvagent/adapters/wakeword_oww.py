@@ -18,6 +18,7 @@ class OwwWakeWord:
     def _ensure(self) -> None:
         if self._detector is None:
             import openwakeword.model as oww_model  # noqa: PLC0415 -- lazy
+
             om: Any = oww_model
             self._detector = om.Model(wakeword_models=[self.model_name])
         if self._source is None:
@@ -26,6 +27,7 @@ class OwwWakeWord:
     def wait(self) -> None:
         self._ensure()
         import numpy as np  # noqa: PLC0415 -- lazy
+
         npx: Any = np
         for frame, _ in self._source.frames():
             scores = self._detector.predict(npx.frombuffer(frame, dtype=np.int16))

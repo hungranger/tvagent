@@ -20,6 +20,7 @@ class PiperTTS:
 
     def _default_synth(self, text: str) -> bytes:
         import piper  # noqa: PLC0415 -- lazy
+
         pp: Any = piper
         if self._model is None:
             self._model = pp.PiperVoice.load(self.voice)
@@ -31,6 +32,7 @@ class PiperTTS:
     def _default_play(self, pcm: bytes) -> None:
         import numpy as np  # noqa: PLC0415 -- lazy
         import sounddevice  # noqa: PLC0415 -- lazy
+
         sd: Any = sounddevice
         npx: Any = np
         with wave.open(io.BytesIO(pcm)) as wf:

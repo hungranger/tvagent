@@ -9,6 +9,7 @@ def test_state_to_json_shape():
     out = json.loads(state_to_json(s))
     assert out == {"person": "Dad", "text": "hi", "card": {"kind": "weather"}}
 
+
 def test_state_to_json_null_card():
     out = json.loads(state_to_json(RenderState(person="Guest", text="hello")))
     assert out["card"] is None

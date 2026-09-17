@@ -32,6 +32,7 @@ class MicSource:
     def __init__(self, sample_rate: int) -> None:
         import sounddevice  # noqa: PLC0415 -- lazy: no mic/backend needed to test logic
         import webrtcvad  # noqa: PLC0415 -- lazy
+
         self.sample_rate = sample_rate
         wv: Any = webrtcvad
         self.vad: Any = wv.Vad(_VAD_AGGRESSIVENESS)
@@ -40,8 +41,9 @@ class MicSource:
     def frames(self) -> Iterator[tuple[bytes, bool]]:
         frame_ms, sr = _FRAME_MS, self.sample_rate
         n = int(sr * frame_ms / _MS_PER_SEC)
-        with self.sd.RawInputStream(samplerate=sr, blocksize=n, dtype="int16",
-                                    channels=1) as stream:
+        with self.sd.RawInputStream(
+            samplerate=sr, blocksize=n, dtype="int16", channels=1
+        ) as stream:
             while True:
                 data, _ = stream.read(n)
                 frame: bytes = bytes(data)
@@ -51,9 +53,9 @@ class MicSource:
 
 def record_seconds(seconds: int, sample_rate: int = 16000) -> AudioClip:
     import sounddevice  # noqa: PLC0415 -- lazy
+
     sd: Any = sounddevice
-    rec = sd.rec(int(seconds * sample_rate), samplerate=sample_rate,
-                 channels=1, dtype="int16")
+    rec = sd.rec(int(seconds * sample_rate), samplerate=sample_rate, channels=1, dtype="int16")
     sd.wait()
     samples: bytes = rec.tobytes()
     return AudioClip(samples=samples, sample_rate=sample_rate)

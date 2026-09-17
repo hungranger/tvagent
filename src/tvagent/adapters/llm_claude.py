@@ -12,6 +12,7 @@ class ClaudeLLM:
         self.model, self.max_tokens = model, max_tokens
         if client is None:
             import anthropic  # noqa: PLC0415 -- lazy
+
             an: Any = anthropic
             client = an.Anthropic()
         self.client = client
@@ -23,7 +24,9 @@ class ClaudeLLM:
             messages.append({"role": "assistant", "content": replied})
         messages.append({"role": "user", "content": user})
         msg = self.client.messages.create(
-            model=self.model, max_tokens=self.max_tokens, system=system,
+            model=self.model,
+            max_tokens=self.max_tokens,
+            system=system,
             output_config={"effort": _EFFORT},
             messages=messages,
         )

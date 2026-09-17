@@ -20,6 +20,7 @@ class WebDisplay:
 
     def _serve(self) -> None:
         import websockets  # noqa: PLC0415 -- lazy
+
         ws_lib: Any = websockets
         asyncio.set_event_loop(self._loop)
 
@@ -35,6 +36,7 @@ class WebDisplay:
         async def main() -> None:
             async with ws_lib.serve(handler, "localhost", self.port):
                 await asyncio.Future()
+
         self._loop.run_until_complete(main())
 
     def render(self, state: RenderState) -> None:
@@ -46,4 +48,5 @@ class WebDisplay:
                     await ws.send(self._last)
                 except Exception:
                     self._clients.discard(ws)
+
         asyncio.run_coroutine_threadsafe(broadcast(), self._loop)

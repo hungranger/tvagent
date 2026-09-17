@@ -1,0 +1,9 @@
+title = "tvagent gitleaks config"
+
+[extend]
+useDefault = true
+
+# No fixture/test secrets in this repo to allowlist. ANTHROPIC_API_KEY is read
+# from the environment (see src/tvagent/adapters/llm_claude.py); it is never
+# hardcoded. Add scoped allowlist entries here if a real fake test token is
+# ever introduced (path- or regex-scoped, never a blanket disable).

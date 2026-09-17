@@ -15,6 +15,7 @@ env/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+.coverage
 
 # SDD scratch (per-plan workspace: ledgers, briefs, reports, review packages)
 .superpowers/
