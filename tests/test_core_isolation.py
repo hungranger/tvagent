@@ -1,5 +1,6 @@
 import ast
 import pathlib
+import sys
 
 
 def test_core_imports_only_core():
@@ -16,5 +17,9 @@ def test_core_imports_only_core():
                 mod = node.module or ""
             elif isinstance(node, ast.Import):
                 mod = node.names[0].name
-            if mod and mod.startswith("tvagent") and not mod.startswith("tvagent.core"):
-                raise AssertionError(f"{pyfile.name} imports non-core module {mod}")
+            if not mod:
+                continue
+            top = mod.split(".")[0]
+            if mod.startswith("tvagent.core") or top in sys.stdlib_module_names:
+                continue
+            raise AssertionError(f"{pyfile.name} imports non-core/non-stdlib module {mod}")

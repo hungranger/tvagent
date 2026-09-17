@@ -48,8 +48,7 @@ def test_build_prompt_content_for_known_person():
     assert system == (
         "You are a family home assistant speaking with Dad.\n"
         "Use a adult tone. Keep replies short and spoken-friendly.\n"
-        "What you remember about them: loves pizza; allergic to peanuts\n"
-        "Recent exchanges: hi -> hello | bye -> cya"
+        "What you remember about them: loves pizza; allergic to peanuts"
     )
     assert user == "what's up"
 
@@ -97,9 +96,6 @@ def test_prior_turn_recalled_in_next_prompt():
     orch.run_once()
     orch, llm, *_rest = _orch(m, "dad", said="anything else", reply="Nope")
     orch.run_once()
-    assert llm.last_system is not None
-    assert "Recent exchanges:" in llm.last_system
-    assert "what's my day -> Standup at 9" in llm.last_system
     assert llm.last_history == [("what's my day", "Standup at 9")]  # F6: history reaches the LLM
 
 

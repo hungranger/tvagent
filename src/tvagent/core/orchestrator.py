@@ -35,10 +35,6 @@ class Orchestrator:
         ]
         if facts:
             lines.append("What you remember about them: " + "; ".join(f.text for f in facts))
-        if history:
-            lines.append(
-                "Recent exchanges: " + " | ".join(f"{h.said} -> {h.replied}" for h in history)
-            )
         return "\n".join(lines), said
 
     def run_once(self) -> Turn:

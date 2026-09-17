@@ -47,7 +47,7 @@ def test_e2e_turn_recall_and_render(tmp_path: pathlib.Path) -> None:
     orch("my dog is named Rex").run_once()  # turn 1 persisted
     orch("what did I just tell you").run_once()  # turn 2 loads history
 
-    assert llm.last_system is not None and "Rex" in llm.last_system  # F10: earlier turn recalled
+    assert llm.last_history == [("my dog is named Rex", "Noted.")]  # F10: earlier turn recalled
     assert tts.spoken[-1] == "Noted."  # F7
     assert disp.last is not None and disp.last.text == "Noted."  # F8
     assert mem.recent_turns("dad", 2)[0].said == "my dog is named Rex"  # F9 persist

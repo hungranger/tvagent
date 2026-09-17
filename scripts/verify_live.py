@@ -14,8 +14,9 @@ import time
 import wave
 
 from tvagent.adapters.memory_json import JsonMemory
+from tvagent.adapters.speakerid_ecapa import EcapaSpeakerID
 from tvagent.config import build_orchestrator
-from tvagent.core.models import AudioClip, Person, RenderState
+from tvagent.core.models import AudioClip, RenderState
 
 
 class _OnceWake:
@@ -59,7 +60,7 @@ def main() -> int:
     with wave.open(str(fx)) as w:
         clip = AudioClip(samples=w.readframes(w.getnframes()), sample_rate=w.getframerate())
     mem = JsonMemory(pathlib.Path("data/verify"))
-    mem.upsert_person(Person(id="tester", name="Tester", embedding=[0.0], prefs={}))
+    EcapaSpeakerID(mem).enroll("Tester", clip)  # real embedding so identify() matches, not GUEST
     disp = _RecordingDisplay()
     orch = build_orchestrator(
         {

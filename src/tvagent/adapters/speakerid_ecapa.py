@@ -13,7 +13,7 @@ _ECAPA_SOURCE = "speechbrain/spkrec-ecapa-voxceleb"
 
 
 def cosine(a: list[float], b: list[float]) -> float:
-    dot = sum(x * y for x, y in zip(a, b, strict=False))
+    dot = sum(x * y for x, y in zip(a, b, strict=True))
     na = math.sqrt(sum(x * x for x in a))
     nb = math.sqrt(sum(y * y for y in b))
     return 0.0 if na == 0 or nb == 0 else dot / (na * nb)
@@ -53,8 +53,6 @@ class EcapaSpeakerID:
         vec = self._embed(clip)
         best_id, best = GUEST, self.threshold
         for p in self.memory.list_people():
-            if p.id == GUEST:
-                continue
             score = cosine(vec, p.embedding)
             if score >= best:
                 best, best_id = score, p.id

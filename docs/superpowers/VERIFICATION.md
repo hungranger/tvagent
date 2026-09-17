@@ -34,7 +34,7 @@ never printed or logged).
 
 | # | Criterion | Where verified | Result |
 |---|-----------|----------------|--------|
-| M1 | Ports-only core | `tests/test_core_isolation.py::test_core_imports_only_core` | PASS |
+| M1 | Ports-only core | `tests/test_core_isolation.py::test_core_imports_only_core` (allows only stdlib + `tvagent.core.*` imports in `core/`; any third-party or other backend import fails it) | PASS |
 | M2 | Adapter swap = one file + config | `tests/test_config.py::test_build_with_all_fakes_swapped_by_config` (DI override) + `test_core_isolation` (core has zero backend imports, so a swap touches only the adapter + `config.py`) | PASS |
 | M3 | Fakes for every port | `tests/test_fakes.py::test_fakes_satisfy_ports`, `tests/test_config.py` (whole orchestrator runs on fakes only, zero hardware/paid calls) | PASS |
 | M4 | POC→HW seam isolated | manual review: only `audio_vad.py` (mic/VAD) and `display_web.py` (browser/websocket) touch devices; `core/`, `memory_json.py`, `llm_claude.py`, `stt_whisper.py`, `tts_piper.py`, `speakerid_ecapa.py` have no device imports (confirmed by reading each adapter + `test_core_isolation`) | PASS |
