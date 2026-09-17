@@ -1,10 +1,20 @@
 # Stage map:
-#   pre-commit (fast, every commit): ruff lint + format, gitleaks secret scan.
-#               Kept TDD-RED-friendly: a commit that references a
-#               not-yet-created symbol must not be blocked here.
+#   pre-commit (fast, every commit): ruff lint + format, gitleaks secret scan,
+#               import-linter. Kept TDD-RED-friendly: a commit that
+#               references a not-yet-created symbol must not be blocked here.
 #   pre-push   (heavier, before push): pyright (strict), pytest + coverage,
 #               pip-audit, uv lockfile drift check, semgrep, ruff ARG
 #               (unused args), vulture (dead code).
+#
+# Self-contained vs. project-venv hooks:
+#   Most hooks below run in a pre-commit-managed isolated env (`language:
+#   python`/a hook repo) and work even if the project `.venv` isn't on PATH —
+#   a bare `git push` "just works". pyright, pytest-cov, uv-lock-check and
+#   pip-audit stay `language: system` because they genuinely need the
+#   project's installed deps / `uv` on PATH (type-checking against installed
+#   packages, running the test suite against project deps, or driving `uv`
+#   itself) — activate `.venv` (or otherwise put those tools on PATH) before
+#   pushing.
 # Reuse in another project: copy this file + the [tool.ruff]/[tool.pyright]/
 # [tool.coverage] blocks from pyproject.toml, then run `pre-commit install`.
 default_install_hook_types: [pre-commit, pre-push]
@@ -18,6 +28,11 @@ repos:
         stages: [pre-commit]
       - id: ruff-format
         stages: [pre-commit]
+      - id: ruff
+        name: ruff --select ARG (unused function args)
+        alias: ruff-arg
+        args: [--select, ARG]
+        stages: [pre-push]
 
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.30.1
@@ -29,13 +44,18 @@ repos:
     hooks:
       - id: import-linter
         name: import-linter (hexagonal architecture contracts)
-        entry: lint-imports
-        language: system
+        # Isolated env: grimp does static import-graph analysis only, it
+        # never imports tvagent's own dependencies — src on PYTHONPATH is
+        # enough, the project need not be installed.
+        entry: sh -c 'PYTHONPATH=src lint-imports'
+        language: python
+        additional_dependencies: ["import-linter==2.15"]
         pass_filenames: false
         stages: [pre-commit]
 
       - id: pyright
         name: pyright (strict)
+        # Needs the project's own venv: type-checks against installed deps.
         entry: pyright
         language: system
         types: [python]
@@ -44,6 +64,7 @@ repos:
 
       - id: pytest-cov
         name: pytest + coverage
+        # Needs the project's own venv: runs the app + its deps.
         entry: pytest --cov --cov-report=term-missing --cov-fail-under=92
         language: system
         pass_filenames: false
@@ -52,6 +73,7 @@ repos:
 
       - id: pip-audit
         name: pip-audit (dependency CVEs)
+        # Needs `uv` on PATH (pipes `uv export` into pip-audit).
         entry: sh -c 'uv export --no-hashes --extra dev --extra run | pip-audit -r -'
         language: system
         pass_filenames: false
@@ -63,6 +85,7 @@ repos:
         # `uv lock --check` verifies the lockfile is current vs pyproject WITHOUT
         # mutating the environment. Do NOT use `uv sync --locked` here — it prunes
         # the dev/run extras from the working venv on every push.
+        # Needs `uv` on PATH.
         entry: uv lock --check
         language: system
         pass_filenames: false
@@ -71,24 +94,22 @@ repos:
 
       - id: semgrep
         name: semgrep (python + security-audit)
+        # Isolated env: semgrep is a standalone scanner, no project deps
+        # needed. It still downloads the p/python and p/security-audit
+        # rulesets over the network at run time, same as before.
         entry: semgrep --config p/python --config p/security-audit --error
-        language: system
-        pass_filenames: false
-        always_run: true
-        stages: [pre-push]
-
-      - id: ruff-arg
-        name: ruff --select ARG (unused function args)
-        entry: ruff check --select ARG .
-        language: system
+        language: python
+        additional_dependencies: ["semgrep==1.176.0"]
         pass_filenames: false
         always_run: true
         stages: [pre-push]
 
       - id: vulture
         name: vulture (dead code)
+        # Isolated env: vulture parses source with `ast`, no project deps needed.
         entry: vulture src tests .vulture_allowlist.py --min-confidence 60
-        language: system
+        language: python
+        additional_dependencies: ["vulture==2.16"]
         pass_filenames: false
         always_run: true
         stages: [pre-push]
