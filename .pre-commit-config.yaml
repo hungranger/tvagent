@@ -1,7 +1,8 @@
 # Stage map:
-#   pre-commit (fast, every commit): ruff lint + format, gitleaks secret scan.
-#   pre-push   (heavier, before push): pyright (strict), pytest + coverage,
-#               pip-audit, uv lockfile drift check, semgrep.
+#   pre-commit (fast, every commit): ruff lint + format, gitleaks secret scan,
+#               pyright (strict).
+#   pre-push   (heavier, before push): pytest + coverage, pip-audit,
+#               uv lockfile drift check, semgrep.
 # Reuse in another project: copy this file + the [tool.ruff]/[tool.pyright]/
 # [tool.coverage] blocks from pyproject.toml, then run `pre-commit install`.
 default_install_hook_types: [pre-commit, pre-push]
@@ -30,7 +31,7 @@ repos:
         language: system
         types: [python]
         pass_filenames: false
-        stages: [pre-push]
+        stages: [pre-commit]
 
       - id: pytest-cov
         name: pytest + coverage

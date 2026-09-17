@@ -8,7 +8,7 @@ Git hooks run through the [pre-commit](https://pre-commit.com) framework, staged
 | pre-commit | ruff | lint (`[tool.ruff]` in `pyproject.toml`) |
 | pre-commit | ruff-format | formatting |
 | pre-commit | gitleaks | secret scan of the staged diff |
-| pre-push | pyright | strict type check (`[tool.pyright]`) |
+| pre-commit | pyright | strict type check (`[tool.pyright]`) |
 | pre-push | pytest-cov | tests + coverage floor (`[tool.coverage]`) |
 | pre-push | pip-audit | dependency CVE scan (audits `uv.lock`) |
 | pre-push | uv sync --locked | fails if `uv.lock` drifted from `pyproject.toml` |
