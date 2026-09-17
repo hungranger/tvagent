@@ -8,7 +8,7 @@ from tests.fakes import (
     FakeTTS,
     FakeWakeWord,
 )
-from tvagent.core.models import GUEST, AudioClip, Fact, Person, Turn
+from tvagent.core.models import GUEST, AudioClip, Fact, Person
 from tvagent.core.orchestrator import Orchestrator
 
 
@@ -39,12 +39,8 @@ def test_build_prompt_content_for_known_person():
         Fact(person_id="dad", text="loves pizza", created_at=1.0),
         Fact(person_id="dad", text="allergic to peanuts", created_at=2.0),
     ]
-    history = [
-        Turn(person_id="dad", ts=1.0, said="hi", replied="hello"),
-        Turn(person_id="dad", ts=2.0, said="bye", replied="cya"),
-    ]
     build = orch._build  # pyright: ignore[reportPrivateUsage]
-    system, user = build(person, facts, history, "what's up")
+    system, user = build(person, facts, "what's up")
     assert system == (
         "You are a family home assistant speaking with Dad.\n"
         "Use a adult tone. Keep replies short and spoken-friendly.\n"
@@ -55,7 +51,7 @@ def test_build_prompt_content_for_known_person():
 
 def test_build_prompt_defaults_for_unknown_guest():
     orch, *_rest = _orch(FakeMemory(), "dad")
-    system, _ = orch._build(None, [], [], "hi")  # pyright: ignore[reportPrivateUsage]
+    system, _ = orch._build(None, [], "hi")  # pyright: ignore[reportPrivateUsage]
     assert system == (
         "You are a family home assistant speaking with an unknown guest.\n"
         "Use a friendly tone. Keep replies short and spoken-friendly."

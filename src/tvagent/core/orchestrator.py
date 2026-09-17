@@ -24,9 +24,7 @@ class Orchestrator:
         self.stt, self.llm, self.tts = stt, llm, tts
         self.memory, self.display = memory, display
 
-    def _build(
-        self, person: Person | None, facts: list[Fact], history: list[Turn], said: str
-    ) -> tuple[str, str]:
+    def _build(self, person: Person | None, facts: list[Fact], said: str) -> tuple[str, str]:
         who = person.name if person else "an unknown guest"
         tone = (person.prefs.get(_TONE_PREF_KEY) if person else None) or _DEFAULT_TONE
         lines = [
@@ -50,7 +48,7 @@ class Orchestrator:
         else:
             facts = self.memory.get_facts(person.id)
             history = self.memory.recent_turns(person.id, _HISTORY_LIMIT)
-        system, user = self._build(person, facts, history, said)
+        system, user = self._build(person, facts, said)
         reply = self.llm.respond(system, user, [(h.said, h.replied) for h in history])
         self.tts.speak(reply)
         self.display.render(RenderState(person=(person.name if person else "Guest"), text=reply))
