@@ -98,6 +98,25 @@ flaky in a locked-down local sandbox.
 **Branch protection:** to make this an actual merge gate, require the `quality-gate` check
 from this workflow in the repo's branch protection rules for `master`.
 
+On `pull_request` runs, two extra stdlib-only steps run before the pre-commit stages
+(they need `fetch-depth: 0` on checkout so `origin/<base_ref>` is resolvable):
+
+- `scripts/gate_ratchet.py` — hard CI blocker. Compares this tree's gate settings
+  (coverage floor, ruff `select`/mccabe max-complexity, vulture `min_confidence`,
+  pyright strictness, import-linter contract count, the nightly mutation floor)
+  against `origin/master` and **fails the build if any gate was weakened**. A gate
+  absent on master (no baseline) is skipped with a printed note, not treated as a pass.
+- `scripts/suppression_diff.py` — visibility only, always exits 0. Scans this PR's
+  added lines vs the `origin/master` merge-base for newly introduced suppressions
+  (`# noqa`, `# type: ignore`, `# pyright: ignore`, `# nosemgrep`, `# pragma: no cover`,
+  `--no-verify`, `|| true`, `continue-on-error`) and allowlist growth
+  (`.vulture_allowlist.py`, `.gitleaks.toml`, ruff `per-file-ignores`), printing a
+  `::warning` GitHub annotation per finding for the human reviewer.
+
+Both are covered further, along with `.github/CODEOWNERS` (owner review required on
+every gate-defining file) and the harness-level protections a coding agent's operator
+must supply outside this repo, in [`docs/agent-safety.md`](agent-safety.md).
+
 ## Dependabot (`.github/dependabot.yml`)
 
 Weekly updates for the `github-actions` ecosystem (workflow action pins) and the `pip`

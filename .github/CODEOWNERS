@@ -1,0 +1,23 @@
+# Gate-defining files: changes here can create, weaken, or bypass a quality
+# gate -- the coverage floor, lint rules, complexity limit, strict
+# type-checking, the secret scanner, the dead-code allowlist, the CI
+# workflows that run all of it, the dependency lockfile a CVE scan reads, or
+# the scripts that ratchet/report on all of the above. They must not change
+# without a human reviewing the diff -- an autonomous agent editing one of
+# these lines should not be able to merge on its own say-so.
+#
+# Enforcement: this file only takes effect once branch protection on the
+# default branch has "Require review from Code Owners" enabled (a repo
+# setting outside this file, the user's to turn on) -- and only once this
+# file itself is merged to the default branch, so it does not retroactively
+# gate the PR that first introduces it. See docs/agent-safety.md.
+
+/pyproject.toml               @hungranger
+/.pre-commit-config.yaml      @hungranger
+/.github/                     @hungranger
+/.gitleaks.toml                @hungranger
+/.vulture_allowlist.py        @hungranger
+/uv.lock                      @hungranger
+/scripts/gate_ratchet.py      @hungranger
+/scripts/suppression_diff.py  @hungranger
+/scripts/mutation_score.py    @hungranger
