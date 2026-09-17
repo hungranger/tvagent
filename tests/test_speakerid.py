@@ -3,7 +3,7 @@ from collections.abc import Iterator
 
 from tvagent.adapters.memory_json import JsonMemory
 from tvagent.adapters.speakerid_ecapa import EcapaSpeakerID, cosine
-from tvagent.core.models import AudioClip
+from tvagent.core.models import GUEST, AudioClip
 
 
 class _StubEmbedder:
@@ -125,6 +125,13 @@ def test_margin_admits_clear_winner(tmp_path: pathlib.Path):
     sid.enroll("Mom", [_clip()])
     embed.next = [0.9, 0.1]  # near Dad, far from Mom -> big gap
     assert sid.identify(_clip()) == "dad"
+
+
+def test_identify_returns_guest_when_no_one_enrolled(tmp_path: pathlib.Path) -> None:
+    # empty memory -> scores is [] -> must hit the `not scores` guard, not scores[-1]
+    m = JsonMemory(tmp_path)
+    sid = EcapaSpeakerID(m, _embed=lambda _c: [1.0, 0.0])
+    assert sid.identify(_clip()) == GUEST
 
 
 def test_warmup_noop_with_injected_embed(tmp_path: pathlib.Path) -> None:

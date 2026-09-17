@@ -11,6 +11,7 @@ verify_live.py -- no fixtures are shipped, so CI SKIPs this cleanly.
 
 import itertools
 import sys
+import tempfile
 import wave
 from pathlib import Path
 
@@ -48,11 +49,12 @@ def _run_grid(
             embed_cache[key] = real_sid._default_embed(clip)  # pyright: ignore[reportPrivateUsage]
         return embed_cache[key]
 
-    real_sid = EcapaSpeakerID(JsonMemory(Path("data/eval_tmp")))
+    eval_tmp = Path(tempfile.mkdtemp(prefix="tvagent-eval-"))
+    real_sid = EcapaSpeakerID(JsonMemory(eval_tmp))
     grid: list[tuple[float, float, float, float]] = []
     for threshold, margin in itertools.product(_THRESHOLDS, _MARGINS):
         sid = EcapaSpeakerID(
-            JsonMemory(Path("data/eval_tmp")),
+            JsonMemory(Path(tempfile.mkdtemp(prefix="tvagent-eval-"))),
             threshold=threshold,
             margin=margin,
             _embed=cached_embed,
