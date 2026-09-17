@@ -60,7 +60,7 @@ def main() -> int:
     with wave.open(str(fx)) as w:
         clip = AudioClip(samples=w.readframes(w.getnframes()), sample_rate=w.getframerate())
     mem = JsonMemory(pathlib.Path("data/verify"))
-    EcapaSpeakerID(mem).enroll("Tester", clip)  # real embedding so identify() matches, not GUEST
+    EcapaSpeakerID(mem).enroll("Tester", [clip])  # real embedding so identify() matches, not GUEST
     disp = _RecordingDisplay()
     orch = build_orchestrator(
         {

@@ -28,7 +28,7 @@ class FakeSpeakerID:
         self.last_clip = clip
         return self._id
 
-    def enroll(self, name: str, clip: AudioClip) -> Person:
+    def enroll(self, name: str, clips: list[AudioClip]) -> Person:
         return Person(id=name.lower(), name=name, embedding=[0.0], prefs={})
 
 
