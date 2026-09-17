@@ -27,6 +27,13 @@ repos:
 
   - repo: local
     hooks:
+      - id: import-linter
+        name: import-linter (hexagonal architecture contracts)
+        entry: lint-imports
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
       - id: pyright
         name: pyright (strict)
         entry: pyright
