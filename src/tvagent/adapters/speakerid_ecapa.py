@@ -9,7 +9,10 @@ from tvagent.core.ports import MemoryStore
 
 _PCM_MAX = 32768.0
 _DEFAULT_THRESHOLD = 0.25
-_DEFAULT_MARGIN = 0.10  # min gap between best and 2nd-best cosine to accept a match
+_DEFAULT_MARGIN = 0.15  # min gap between best and 2nd-best cosine to accept a match
+# 0.15 chosen from a real-ECAPA harness run (distinct TTS voices): 0.10 let a stranger
+# through (50% reject), 0.15 gave 100% correct-ID + 100% stranger-reject. Re-tune on
+# real family voices via scripts/eval_speaker.py.
 _ECAPA_SOURCE = "speechbrain/spkrec-ecapa-voxceleb"
 _MIN_FOR_MARGIN = 2  # need a 2nd-best score to apply the margin check
 
