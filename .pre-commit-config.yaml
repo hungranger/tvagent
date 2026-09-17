@@ -1,8 +1,10 @@
 # Stage map:
-#   pre-commit (fast, every commit): ruff lint + format, gitleaks secret scan,
-#               pyright (strict).
-#   pre-push   (heavier, before push): pytest + coverage, pip-audit,
-#               uv lockfile drift check, semgrep.
+#   pre-commit (fast, every commit): ruff lint + format, gitleaks secret scan.
+#               Kept TDD-RED-friendly: a commit that references a
+#               not-yet-created symbol must not be blocked here.
+#   pre-push   (heavier, before push): pyright (strict), pytest + coverage,
+#               pip-audit, uv lockfile drift check, semgrep, ruff ARG
+#               (unused args), vulture (dead code).
 # Reuse in another project: copy this file + the [tool.ruff]/[tool.pyright]/
 # [tool.coverage] blocks from pyproject.toml, then run `pre-commit install`.
 default_install_hook_types: [pre-commit, pre-push]
@@ -31,7 +33,7 @@ repos:
         language: system
         types: [python]
         pass_filenames: false
-        stages: [pre-commit]
+        stages: [pre-push]
 
       - id: pytest-cov
         name: pytest + coverage
@@ -63,6 +65,22 @@ repos:
       - id: semgrep
         name: semgrep (python + security-audit)
         entry: semgrep --config p/python --config p/security-audit --error
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
+      - id: ruff-arg
+        name: ruff --select ARG (unused function args)
+        entry: ruff check --select ARG .
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
+      - id: vulture
+        name: vulture (dead code)
+        entry: vulture src tests .vulture_allowlist.py --min-confidence 80
         language: system
         pass_filenames: false
         always_run: true

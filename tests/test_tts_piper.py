@@ -20,7 +20,7 @@ def test_speak_synthesizes_then_plays():
 
 def test_empty_text_does_not_play():
     played: list[bytes] = []
-    PiperTTS(_synth=lambda t: b"x", _play=played.append).speak("  ")
+    PiperTTS(_synth=lambda _t: b"x", _play=played.append).speak("  ")
     assert played == []
 
 

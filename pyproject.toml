@@ -5,7 +5,7 @@ requires-python = ">=3.11"
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["pytest", "ruff==0.15.7", "pyright", "pytest-cov", "pre-commit"]
+dev = ["pytest", "ruff==0.15.7", "pyright", "pytest-cov", "pre-commit", "vulture"]
 run = ["anthropic", "faster-whisper", "piper-tts", "speechbrain", "openwakeword", "webrtcvad", "websockets", "sounddevice", "numpy"]
 
 [tool.pytest.ini_options]
@@ -23,8 +23,13 @@ select = ["E", "F", "I", "UP", "B", "SIM", "PL", "RUF", "N", "C4", "PTH"]
 
 [tool.ruff.lint.per-file-ignores]
 # Tests may use literals freely (assertions, fixtures) and don't need the magic-value rule.
-"tests/**" = ["PLR2004", "S101"]
+# ARG is only enforced on pre-push (ruff-arg local hook), not in the main
+# `select` above (that would run it pre-commit). Ignore it where unused args
+# are interface-mandated, not dead: test fakes/stubs satisfy Protocols, and
+# Protocol methods in ports.py declare params they never use.
+"tests/**" = ["PLR2004", "S101", "ARG001", "ARG002"]
 "scripts/**" = ["PLR2004"]
+"src/tvagent/core/ports.py" = ["ARG001", "ARG002"]
 
 [tool.pyright]
 include = ["src", "tests", "scripts"]
@@ -35,6 +40,10 @@ typeCheckingMode = "strict"
 # dev/type-check environment and several ship no type stubs. Do not fail on them.
 reportMissingImports = "none"
 reportMissingModuleSource = "none"
+reportMissingTypeStubs = "none"
+
+[tool.vulture]
+min_confidence = 80
 
 [tool.mutmut]
 source_paths = ["src/tvagent/"]
