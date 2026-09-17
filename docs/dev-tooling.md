@@ -5,7 +5,7 @@ Git hooks run through the [pre-commit](https://pre-commit.com) framework, staged
 
 | Stage | Hook | Env | What it checks |
 |---|---|---|---|
-| pre-commit | ruff | isolated (repo hook) | lint (`[tool.ruff]` in `pyproject.toml`) |
+| pre-commit | ruff | isolated (repo hook) | lint (`[tool.ruff]` in `pyproject.toml`), cyclomatic complexity C901 (max-complexity 10) |
 | pre-commit | ruff-format | isolated (repo hook) | formatting |
 | pre-commit | gitleaks | isolated (repo hook) | secret scan of the staged diff |
 | pre-commit | import-linter | isolated (`language: python`) | hexagonal architecture contracts (`[tool.importlinter]`), fast static import-graph check on `src`, safe pre-commit |

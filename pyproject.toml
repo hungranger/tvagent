@@ -20,8 +20,11 @@ target-version = "py311"
 extend-exclude = [".vulture_allowlist.py"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM", "PL", "RUF", "N", "C4", "PTH"]
+select = ["E", "F", "I", "UP", "B", "SIM", "PL", "RUF", "N", "C4", "C901", "PTH"]
 # PLR2004 = magic value used in comparison — this is the "no magic number/string" rule.
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
 
 [tool.ruff.lint.per-file-ignores]
 # Tests may use literals freely (assertions, fixtures) and don't need the magic-value rule.
