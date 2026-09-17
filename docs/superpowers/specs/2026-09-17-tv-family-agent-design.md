@@ -43,6 +43,13 @@ The core orchestration logic is pure and hardware-free. Every capability is an i
 - **Maintainable:** swapping an impl (e.g. Whisper -> other STT) touches one file.
 - **POC -> HW:** only edge adapters change.
 
+### Reuse decision: huggingface/speech-to-speech (Path A — borrow backends)
+Do NOT build the STT/TTS/VAD plumbing from scratch, and do NOT fork the repo wholesale. That repo is a modular VAD -> STT -> LLM -> TTS pipeline (Apache-2.0, active, local-capable) but its loop is *continuous* speech-to-speech, and it lacks wake word, speaker ID, per-person memory, and display — exactly this project's spine.
+
+- **We own:** the wake-word-gated Orchestrator loop, all ports, and the spine ports (`WakeWord`, `SpeakerID`, `MemoryStore`, `Display`). None exist in the repo.
+- **We borrow:** their backend integrations + config patterns behind OUR `STT`, `TTS`, `AudioCapture(VAD)` adapters. Their multi-backend design validates the swappable-adapter thesis.
+- **We do NOT adopt:** their continuous threading/queue loop (fights the wake-first privacy gate).
+
 ---
 
 ## 3. Ports (interfaces)
@@ -80,6 +87,20 @@ The **Orchestrator** depends only on these interfaces, never on concrete libs.
 
 ### Memory decision (explicitly deferred by interface)
 JSON-file impl for POC. Swap to SQLite (`sqlite-vec` for semantic recall) the day "last N turns for person X" or vector search is needed. One-line config change, no rewrite.
+
+### Licensing / commercialization
+Two independent layers: **code license** and **model-weight license**. Apache-2.0 on the speech-to-speech repo permits commercial use of the *code*; each downloaded *model* carries its own license, which can be non-commercial even inside a permissive repo. Path A lets us pick commercial-safe backends and drop restricted ones.
+
+| Component | Chosen model | License (verify at build) | Commercial |
+|-----------|--------------|---------------------------|:-:|
+| VAD | Silero | MIT | yes |
+| STT | faster-whisper | MIT | yes |
+| TTS | Piper | MIT | yes |
+| Speaker ID | SpeechBrain ECAPA | Apache-2.0 | yes |
+| Wake word | openWakeWord | Apache-2.0 | yes |
+| Brain | Claude API | commercial via API terms | yes |
+
+The v1 stack is commercial-safe by default. **Avoid** `-NC`/"research only" weights (e.g. ChatTTS = CC-BY-NC; Qwen3-TTS license must be read). Re-verify every model license before any commercial launch; get legal review for real revenue; check Anthropic usage policies for the product category. Not legal advice.
 
 ---
 
