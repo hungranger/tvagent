@@ -74,3 +74,19 @@ def test_identify_matches_at_exact_threshold(tmp_path: pathlib.Path):
     sid.enroll("Dad", _clip())
     embed.next = [1.0, 0.0]  # identical vector -> cosine == 1.0 == threshold, must match
     assert sid.identify(_clip()) == "dad"
+
+
+def test_warmup_noop_with_injected_embed(tmp_path: pathlib.Path) -> None:
+    # warmup preloads the real ECAPA model; with an injected embedder there is
+    # nothing to preload, so it must be a safe no-op (no download, no _model).
+    sid = EcapaSpeakerID(JsonMemory(tmp_path), _embed=lambda _c: [1.0])
+    sid.warmup()
+    assert sid._model is None  # pyright: ignore[reportPrivateUsage]
+
+
+def test_warmup_loads_model_when_default(tmp_path: pathlib.Path) -> None:
+    # With the default embedder, warmup() must populate _model via _load_model.
+    sid = EcapaSpeakerID(JsonMemory(tmp_path))
+    sid._load_model = lambda: "MODEL"  # type: ignore[method-assign]  # stub the heavy download
+    sid.warmup()
+    assert sid._model == "MODEL"  # pyright: ignore[reportPrivateUsage]

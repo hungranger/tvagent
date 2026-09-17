@@ -27,15 +27,24 @@ class EcapaSpeakerID:
         _embed: Callable[[AudioClip], list[float]] | None = None,
     ) -> None:
         self.memory, self.threshold = memory, threshold
+        self._using_default_embed = _embed is None
         self._embed = _embed or self._default_embed
         self._model: Any = None
 
+    def _load_model(self) -> Any:
+        import speechbrain.inference.speaker as sb_speaker  # noqa: PLC0415 -- lazy
+
+        sb: Any = sb_speaker
+        return sb.EncoderClassifier.from_hparams(source=_ECAPA_SOURCE)
+
+    def warmup(self) -> None:
+        # Preload the ECAPA model at boot so the first turn doesn't pay for it.
+        if self._using_default_embed and self._model is None:
+            self._model = self._load_model()
+
     def _default_embed(self, clip: AudioClip) -> list[float]:
         if self._model is None:
-            import speechbrain.inference.speaker as sb_speaker  # noqa: PLC0415 -- lazy
-
-            sb: Any = sb_speaker
-            self._model = sb.EncoderClassifier.from_hparams(source=_ECAPA_SOURCE)
+            self._model = self._load_model()
         import torch  # noqa: PLC0415 -- lazy
 
         th: Any = torch

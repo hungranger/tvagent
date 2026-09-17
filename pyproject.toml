@@ -69,6 +69,7 @@ exclude_also = [
     "if self._source is None:",   # lazy real mic source construction
     "def main\\(\\) -> None:",     # enroll.py CLI glue: mic capture + real embedding model
     "def _(memory|wake|capture|speaker|stt|llm|tts|display)\\(",  # config.py real-adapter factories, tested via overrides
+    "def _load_model",            # hardware-backed model download/load (ECAPA, Piper), tested via stubbed warmup
 ]
 
 [build-system]

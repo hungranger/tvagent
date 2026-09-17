@@ -14,25 +14,34 @@ class PiperTTS:
         _play: Callable[[bytes], None] | None = None,
     ) -> None:
         self.voice = voice
+        self._using_default_synth = _synth is None
         self._synth = _synth or self._default_synth
         self._play = _play or self._default_play
         self._model: Any = None
 
-    def _default_synth(self, text: str) -> bytes:
+    def _load_model(self) -> Any:
+        import importlib  # noqa: PLC0415 -- lazy
+        from pathlib import Path  # noqa: PLC0415 -- lazy
+
         import piper  # noqa: PLC0415 -- lazy
 
         pp: Any = piper
-        if self._model is None:
-            import importlib  # noqa: PLC0415 -- lazy
-            from pathlib import Path  # noqa: PLC0415 -- lazy
+        dv: Any = importlib.import_module("piper.download_voices")
+        cache = Path.home() / ".cache" / "tvagent" / "piper"
+        onnx = cache / f"{self.voice}.onnx"
+        if not onnx.exists():
+            cache.mkdir(parents=True, exist_ok=True)
+            dv.download_voice(self.voice, cache)
+        return pp.PiperVoice.load(onnx)
 
-            dv: Any = importlib.import_module("piper.download_voices")
-            cache = Path.home() / ".cache" / "tvagent" / "piper"
-            onnx = cache / f"{self.voice}.onnx"
-            if not onnx.exists():
-                cache.mkdir(parents=True, exist_ok=True)
-                dv.download_voice(self.voice, cache)
-            self._model = pp.PiperVoice.load(onnx)
+    def warmup(self) -> None:
+        # Download+load the Piper voice at boot so the first turn doesn't pay for it.
+        if self._using_default_synth and self._model is None:
+            self._model = self._load_model()
+
+    def _default_synth(self, text: str) -> bytes:
+        if self._model is None:
+            self._model = self._load_model()
         buf = io.BytesIO()
         with wave.open(buf, "wb") as wf:
             self._model.synthesize_wav(text, wf)

@@ -7,10 +7,12 @@ from tvagent.core.orchestrator import Orchestrator
 _MEMORY_ROOT = pathlib.Path("data/memory")
 
 
-def build_orchestrator(overrides: dict[str, object] | None = None) -> Orchestrator:
+def build_orchestrator(
+    overrides: dict[str, object] | None = None, warm: bool = True
+) -> Orchestrator:
     o = overrides or {}
     memory = _get(o, "memory", _memory)
-    return Orchestrator(
+    orch = Orchestrator(
         wake=_get(o, "wake", _wake),
         capture=_get(o, "capture", _capture),
         speaker=_get(o, "speaker", lambda: _speaker(memory)),
@@ -20,6 +22,13 @@ def build_orchestrator(overrides: dict[str, object] | None = None) -> Orchestrat
         memory=memory,
         display=_get(o, "display", _display),
     )
+    if warm:
+        # Preload heavy local models off the turn path (cold-start ~40s → boot).
+        for adapter in (orch.stt, orch.speaker, orch.tts):
+            warmup: Any = getattr(adapter, "warmup", None)
+            if callable(warmup):
+                warmup()
+    return orch
 
 
 def _get(overrides: dict[str, object], key: str, factory: Any) -> Any:
