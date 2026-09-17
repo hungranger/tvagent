@@ -113,7 +113,9 @@ repos:
       - id: pip-audit
         name: pip-audit (dependency CVEs)
         # Needs `uv` on PATH (pipes `uv export` into pip-audit).
-        entry: sh -c 'uv export --no-hashes --extra dev --extra run | pip-audit -r -'
+        # -r /dev/stdin, not -r -: this pip-audit version treats "-" as a
+        # literal filename rather than stdin.
+        entry: sh -c 'uv export --no-hashes --extra dev --extra run | pip-audit -r /dev/stdin'
         language: system
         pass_filenames: false
         always_run: true
