@@ -21,6 +21,11 @@ pre-commit: strict typing and whole-picture dead-code analysis can legitimately 
 an intermediate TDD-RED commit (e.g. a test that references a symbol that doesn't exist
 yet), and pre-commit should stay fast and RED-friendly.
 
+`[tool.pyright]` sets `reportMissingTypeStubs = "warning"`: the untyped C-extension
+runtime backends (sounddevice, webrtcvad, speechbrain, faster_whisper, openwakeword, …)
+ship no stubs, so this stays a visible warning rather than a silent `"none"` — the gate
+still fails only on real type errors, not on these.
+
 ## Reuse in another project
 
 1. Copy `.pre-commit-config.yaml`, `.gitleaks.toml`, and the `[tool.ruff]`,

@@ -35,6 +35,10 @@ select = ["E", "F", "I", "UP", "B", "SIM", "PL", "RUF", "N", "C4", "PTH"]
 
 [tool.pyright]
 include = ["src", "tests", "scripts"]
+# .vulture_allowlist.py is a vulture whitelist stub (bare names, not real
+# code) at the repo root — already outside `include`, excluded explicitly too
+# so this stays true regardless of how `include` evolves.
+exclude = [".vulture_allowlist.py"]
 pythonVersion = "3.11"
 typeCheckingMode = "strict"
 # Optional runtime backends (anthropic, faster_whisper, piper, speechbrain, torch,
@@ -42,6 +46,11 @@ typeCheckingMode = "strict"
 # dev/type-check environment and several ship no type stubs. Do not fail on them.
 reportMissingImports = "none"
 reportMissingModuleSource = "none"
+# Some of these ship no py.typed/stubs even when installed (e.g. in an env with
+# the `run` extras present): downgrade to warning rather than "none" so the
+# untyped-dependency signal stays visible instead of silently hidden, while
+# still not failing the gate (pyright's exit code only reflects errors).
+reportMissingTypeStubs = "warning"
 
 [tool.vulture]
 min_confidence = 60
