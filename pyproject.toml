@@ -11,6 +11,7 @@ run = ["anthropic", "faster-whisper", "piper-tts", "speechbrain", "openwakeword"
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+markers = ["component: real-backend tests needing models/audio fixtures"]
 
 [build-system]
 requires = ["setuptools"]
