@@ -114,3 +114,17 @@ Now proven LIVE through `Orchestrator.run_once()` (real ECAPA speaker-ID, real f
 **Bug found + fixed by this live run:** `PiperTTS._default_synth` loaded the voice by bare name (`PiperVoice.load("en_US-amy-medium")`) — fails with `FileNotFoundError` on real hardware — and called the removed `synthesize(text, wf)` API. Fixed to download the voice to `~/.cache/tvagent/piper` on first use and call `synthesize_wav`. Only the real hardware path was affected (unit tests stub `_synth`), which is exactly why only live e2e caught it.
 
 **Still not verified:** Q2 speaker-ID accuracy on real *family* voices (only one synthetic enrollee tested); Q3 wake false-fire; real-mic F1/F12; latency on the target mini-PC (this 41s is a dev-Mac cold number). Anthropic SDK param contract now implicitly validated by the successful live call (params accepted, real reply returned).
+
+---
+
+## Q1 latency — FIXED via startup warmup (2026-09-17, branch feat/latency-warmup)
+
+Profiling showed the 41s was **entirely cold-start** (lazy model loads on the first turn: ECAPA + Piper voice download), not per-turn work. `build_orchestrator(warm=True)` now preloads the heavy local models at boot via each adapter's `warmup()`, moving that cost off the turn path.
+
+| Metric | Before | After |
+|--------|-------:|------:|
+| Boot (build + warmup, one-time) | — | ~6s (first-ever run adds the Piper voice download) |
+| Per-turn local (STT + speaker + Piper synth), warm | ~40s first turn | **0.33s** every turn |
+| Warm turn incl. real Claude (~3.1s) | 41s | **~3.5s** — near the ~3s Q1 target; Claude is the floor |
+
+Measured with the real STT/ECAPA/Piper adapters (fake LLM to isolate local latency). To go under 3s, the next lever is streaming Claude (first-token) or a smaller/faster LLM — the local pipeline is no longer the bottleneck.
