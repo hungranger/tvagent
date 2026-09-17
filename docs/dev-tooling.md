@@ -3,23 +3,140 @@
 Git hooks run through the [pre-commit](https://pre-commit.com) framework, staged so
 `git commit` stays fast and `git push` carries the heavier gate.
 
-| Stage | Hook | What it checks |
-|---|---|---|
-| pre-commit | ruff | lint (`[tool.ruff]` in `pyproject.toml`) |
-| pre-commit | ruff-format | formatting |
-| pre-commit | gitleaks | secret scan of the staged diff |
-| pre-commit | pyright | strict type check (`[tool.pyright]`) |
-| pre-push | pytest-cov | tests + coverage floor (`[tool.coverage]`) |
-| pre-push | pip-audit | dependency CVE scan (audits `uv.lock`) |
-| pre-push | uv lock --check | fails if `uv.lock` drifted from `pyproject.toml` (non-mutating — does not touch the venv) |
-| pre-push | semgrep | `p/python` + `p/security-audit` rule sets |
+| Stage | Hook | Env | What it checks |
+|---|---|---|---|
+| pre-commit | trailing-whitespace, end-of-file-fixer, check-yaml, check-toml, check-merge-conflict, check-added-large-files | isolated (`pre-commit/pre-commit-hooks` repo hook) | basic hygiene; `.vulture_allowlist.py` excluded from the two fixers since it's a generated whitelist stub |
+| pre-commit | ruff | isolated (repo hook) | lint (`[tool.ruff]` in `pyproject.toml`), cyclomatic complexity C901 (max-complexity 10) |
+| pre-commit | ruff-format | isolated (repo hook) | formatting |
+| pre-commit | gitleaks | isolated (repo hook) | secret scan of the staged diff |
+| pre-commit | import-linter | isolated (`language: python`) | hexagonal architecture contracts (`[tool.importlinter]`), fast static import-graph check on `src`, safe pre-commit |
+| pre-push | pyright | **project venv** | strict type check (`[tool.pyright]`) |
+| pre-push | pytest-cov | **project venv** | tests + coverage floor (`[tool.coverage.report] fail_under = 92`, single source — see Coverage floor below) |
+| pre-push | pip-audit | **project venv (`uv`)** | dependency CVE scan (audits `uv.lock`) |
+| pre-push | uv lock --check | **project venv (`uv`)** | fails if `uv.lock` drifted from `pyproject.toml` (non-mutating — does not touch the venv) |
+| pre-push | semgrep | isolated (official `semgrep/semgrep` repo hook, rev-pinned) | `p/python` + `p/security-audit` rule sets |
+| pre-push | ruff-arg | isolated (repo hook, `ruff-pre-commit` again) | unused function/lambda args (`ARG`), not in the main `[tool.ruff.lint] select` so it stays out of pre-commit |
+| pre-push | vulture | isolated (`language: python`) | dead functions/classes/methods/attrs/variables, gated by `.vulture_allowlist.py`. Runs at `--min-confidence 60` — vulture scores unused functions/classes/attrs/variables at exactly 60%, so `80` (the default-ish "safe" threshold) would only catch unused imports (90%) and unreachable code (100%) and never fire on dead functions, which defeats the point of adding vulture. `60` is noisier (more false positives, e.g. dataclass fields round-tripped through serialization); triage misses into `.vulture_allowlist.py`, don't raise the threshold to silence them |
+
+**Self-contained vs. project-venv hooks:** pre-commit resolves `language: python`
+hooks (and hooks from an external hook repo, like `ruff-pre-commit`) into their
+own isolated envs, pinned via `additional_dependencies`/`rev` — these run
+regardless of what's on `PATH`, so a bare `git push` with no `.venv` activated
+still works for them. `pyright`, `pytest-cov`, `pip-audit` and `uv-lock-check`
+stay `language: system` (**project venv** above) because they genuinely need
+the project's own environment: pyright type-checks against installed deps,
+pytest-cov runs the app and its deps, and pip-audit/uv-lock-check both need
+`uv` itself. Activate `.venv` (or otherwise put those four on `PATH`) before
+pushing.
+
+`import-linter` moved to an isolated `language: python` env even though it
+analyzes `tvagent`: `grimp` (its import-graph engine) does static AST-level
+analysis of import statements only — it never actually imports `tvagent`'s
+runtime dependencies — so `PYTHONPATH=src` is enough for `lint-imports` to
+find the `tvagent` package; the project need not be installed. Verified by
+running `lint-imports` from a fresh `uv venv` with only `import-linter`
+installed and `PATH` stripped to `/usr/bin:/bin` — it still resolved and
+passed all 3 contracts.
+
+`semgrep` uses the official `https://github.com/semgrep/semgrep` pre-commit
+repo hook, pinned by `rev: v1.176.0` — same pattern as `ruff-pre-commit` and
+`gitleaks` above. `rev` is the single source of truth for the version; there
+is no separate `additional_dependencies` pin to drift out of sync. It still
+downloads the `p/python`/`p/security-audit` rulesets over the network at run
+time, same as before.
+
+`[tool.importlinter]` (root_package `tvagent`) enforces three contracts: a
+`forbidden` contract keeping `tvagent.core` free of adapter/config/app/shared
+and external-backend imports; a `layers` contract pinning the dependency
+direction `core -> tvagent.audio -> adapters -> config -> app/enroll`; and an
+`independence` contract requiring the 8 port adapters never import each
+other. These replace the hand-rolled `tests/test_core_isolation.py` (which
+only checked the core-purity half) with a single static source of truth that
+also runs on every commit.
+
+pyright and the dead-code checks (`ruff --select ARG`, `vulture`) live on pre-push, not
+pre-commit: strict typing and whole-picture dead-code analysis can legitimately fail on
+an intermediate TDD-RED commit (e.g. a test that references a symbol that doesn't exist
+yet), and pre-commit should stay fast and RED-friendly.
+
+`[tool.pyright]` sets `reportMissingTypeStubs = "warning"`: the untyped C-extension
+runtime backends (sounddevice, webrtcvad, speechbrain, faster_whisper, openwakeword, …)
+ship no stubs, so this stays a visible warning rather than a silent `"none"` — the gate
+still fails only on real type errors, not on these.
+
+## Coverage floor: single source
+
+The 92% coverage floor lives in exactly one place: `[tool.coverage.report] fail_under = 92`
+in `pyproject.toml`. The pre-push `pytest-cov` hook runs plain
+`pytest --cov --cov-report=term-missing`, with no `--cov-fail-under` flag — pytest-cov
+honors `fail_under` from config even when the flag is absent.
+
+Verified empirically (not assumed): temporarily bumping the config value alone (no CLI
+flag) above the real coverage number makes `pytest --cov` exit 1 and print
+`FAIL Required test coverage of 97.0% not reached. Total coverage: 96.42%`; restoring
+`fail_under = 92` makes it pass again at the same 96.42%. So a single config edit is
+guaranteed to move both what CI/hooks enforce and what's reported — there's no second
+number that can drift out of sync.
+
+## CI (`.github/workflows/ci.yml`)
+
+Runs on every pull request and on push to `master`. It does **not** re-list ruff/pyright/
+pytest/etc — it installs the project (`pip install -e ".[dev]" numpy`, matching
+`nightly-mutation.yml`) plus `pre-commit`, then runs:
+
+```
+pre-commit run --all-files --hook-stage pre-commit --show-diff-on-failure
+pre-commit run --all-files --hook-stage pre-push --show-diff-on-failure
+```
+
+against the same `.pre-commit-config.yaml` the local hooks use — `.pre-commit-config.yaml`
+is the single source of truth for which tools run and with what config; there is nothing
+to keep in sync between local hooks and CI. On a clean `ubuntu-latest` runner, `pip-audit`
+and `semgrep` also get real network access, so CI validates them for real even when they're
+flaky in a locked-down local sandbox.
+
+**Branch protection:** to make this an actual merge gate, require the `quality-gate` check
+from this workflow in the repo's branch protection rules for `master`.
+
+On `pull_request` runs, two extra stdlib-only steps run before the pre-commit stages
+(they need `fetch-depth: 0` on checkout so `origin/<base_ref>` is resolvable):
+
+- `scripts/gate_ratchet.py` — hard CI blocker. Compares this tree's gate settings
+  (coverage floor, ruff `select`/mccabe max-complexity, vulture `min_confidence`,
+  pyright strictness, import-linter contract count, the nightly mutation floor)
+  against `origin/master` and **fails the build if any gate was weakened**. A gate
+  absent on master (no baseline) is skipped with a printed note, not treated as a pass.
+- `scripts/suppression_diff.py` — visibility only, always exits 0. Scans this PR's
+  added lines vs the `origin/master` merge-base for newly introduced suppressions
+  (`# noqa`, `# type: ignore`, `# pyright: ignore`, `# nosemgrep`, `# pragma: no cover`,
+  `--no-verify`, `|| true`, `continue-on-error`) and allowlist growth
+  (`.vulture_allowlist.py`, `.gitleaks.toml`, ruff `per-file-ignores`), printing a
+  `::warning` GitHub annotation per finding for the human reviewer.
+
+Both are covered further, along with `.github/CODEOWNERS` (owner review required on
+every gate-defining file) and the harness-level protections a coding agent's operator
+must supply outside this repo, in [`docs/agent-safety.md`](agent-safety.md).
+
+## Dependabot (`.github/dependabot.yml`)
+
+Weekly updates for the `github-actions` ecosystem (workflow action pins) and the `pip`
+ecosystem (this project's own dependencies, resolved from `pyproject.toml`).
+
+Dependabot does **not** see the pinned `rev:` values inside `.pre-commit-config.yaml`
+(`ruff-pre-commit`, `gitleaks`, `semgrep`, `pre-commit-hooks`) — those aren't a supported
+ecosystem. `.github/workflows/pre-commit-autoupdate.yml` covers that gap: it runs
+`pre-commit autoupdate` weekly and opens a PR with any hook-rev bumps for review (never
+auto-merged).
 
 ## Reuse in another project
 
 1. Copy `.pre-commit-config.yaml`, `.gitleaks.toml`, and the `[tool.ruff]`,
    `[tool.pyright]`, and `[tool.coverage]` blocks from `pyproject.toml`.
-2. Install `ruff`, `pyright`, `pytest-cov`, `pip-audit`, `semgrep`, and `uv` in
-   the project's environment, then run:
+2. `ruff`, `ruff-format`, `ruff-arg`, `gitleaks`, `import-linter`, `semgrep`
+   and `vulture` are self-contained — `pre-commit install` provisions their
+   isolated envs on its own, nothing to install for those.
+3. Install `pyright`, `pytest-cov`, `pip-audit` and `uv` in the project's own
+   environment (they run `language: system`), then run:
    ```
    pre-commit install
    ```
@@ -28,7 +145,12 @@ Git hooks run through the [pre-commit](https://pre-commit.com) framework, staged
 
 ## Notes
 
-- All local/system hooks call tools by bare name (`pyright`, `pytest`,
-  `pip-audit`, `uv`, `semgrep`) resolved from `PATH` — no machine-specific
-  paths in the config.
-- Coverage floor: see `task-hook-report.md` for how it was measured and set.
+- The four `language: system` hooks (`pyright`, `pytest-cov`, `pip-audit`,
+  `uv-lock-check`) call tools by bare name resolved from `PATH` — no
+  machine-specific paths in the config — but that means the project venv (or
+  wherever those tools live) must be on `PATH` when pushing. Every other hook
+  runs in a pre-commit-managed isolated env, so `git push` with no venv
+  active still runs those.
+- Coverage floor: single-sourced in `[tool.coverage.report] fail_under`, see
+  "Coverage floor: single source" above. `task-hook-report.md` has the original
+  measurement that set the number at 92.

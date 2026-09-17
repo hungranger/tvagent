@@ -1,0 +1,16 @@
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+# Note: dependabot does not manage pre-commit hook `rev`s (ruff-pre-commit,
+# gitleaks, semgrep, pre-commit-hooks). Those are bumped manually with
+# `pre-commit autoupdate` — see the scheduled workflow in
+# pre-commit-autoupdate.yml, which opens a PR weekly.

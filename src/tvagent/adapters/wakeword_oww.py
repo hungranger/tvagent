@@ -1,6 +1,6 @@
 from typing import Any
 
-from tvagent.adapters.audio_vad import MicSource
+from tvagent.audio import MicSource
 
 _SAMPLE_RATE = 16000
 _WAKE_THRESHOLD = 0.5
