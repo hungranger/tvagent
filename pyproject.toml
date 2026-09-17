@@ -1,0 +1,17 @@
+[project]
+name = "tvagent"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+run = ["anthropic", "faster-whisper", "piper-tts", "speechbrain", "openwakeword", "webrtcvad", "websockets", "sounddevice", "numpy"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
