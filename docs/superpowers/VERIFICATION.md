@@ -82,3 +82,35 @@ SKIP live e2e: ANTHROPIC_API_KEY not set
 - **F1 real-mic false-fire measurement and F12 real enrollment flow**: covered here only by unit tests against fake detectors/embeddings; the manual mic-in-hand runs described in the spec were not performed (no microphone in this sandbox).
 - **Hardware adapters on real devices**: `audio_vad.py` (real mic capture) and `display_web.py` (real browser/kiosk render) are excluded from coverage by design (`pyproject.toml` `[tool.coverage.report] exclude_also`) and were not exercised against real hardware in this session.
 - **Anthropic SDK parameter contract**: `model="claude-opus-5"` and `output_config={"effort":"low"}` are UNVALIDATED by the test suite — the stub `create(**kwargs)` swallows any keyword, so these params are asserted-as-received, never checked against the real SDK. The first real live call is the only validation.
+
+---
+
+## Live E2E run — EXECUTED 2026-09-17 (real hardware, key present)
+
+The live proof was actually run: fixture generated with macOS `say "hello there"` → `afconvert` to 16 kHz mono WAV (`tests/fixtures/hello.wav`, gitignored); `ANTHROPIC_API_KEY` sourced from the developer's key store; `.[run]` deps installed.
+
+```
+$ python scripts/verify_live.py
+HEARD: 'Hello there.'
+REPLIED: 'Hi Tester! Good to hear from you. What can I help with today?'
+RENDERED: 'Hi Tester! Good to hear from you. What can I help with today?'
+END-TO-END LATENCY: 41.42s
+LIVE E2E PASS
+```
+
+Now proven LIVE through `Orchestrator.run_once()` (real ECAPA speaker-ID, real faster-whisper STT, real Claude, real Piper TTS, real JsonMemory):
+
+| Criterion | Live result |
+|-----------|-------------|
+| F3 speaker ID | enrolled "Tester" via real ECAPA, identified correctly (reply is person-tuned: "Hi Tester!") ✅ |
+| F4 transcribe | Whisper → "Hello there." ✅ |
+| F5 prompt tuned to person | reply addresses Tester by name ✅ |
+| F6 reply generated (real Claude) | non-empty reply ✅ |
+| F7 spoken (Piper) | synth+play completed without error ✅ |
+| F8 shown | RENDERED == reply ✅ |
+| F9 persisted | asserted by script ✅ |
+| Q1 latency | **41.4s COLD (first run: model loads + Piper voice download)** — FAR over the ~3s target. Steady-state (warm models) unmeasured; the ~3s budget is NOT met as-is and needs profiling/tuning (smaller Whisper, model preload, streaming). ⚠️ |
+
+**Bug found + fixed by this live run:** `PiperTTS._default_synth` loaded the voice by bare name (`PiperVoice.load("en_US-amy-medium")`) — fails with `FileNotFoundError` on real hardware — and called the removed `synthesize(text, wf)` API. Fixed to download the voice to `~/.cache/tvagent/piper` on first use and call `synthesize_wav`. Only the real hardware path was affected (unit tests stub `_synth`), which is exactly why only live e2e caught it.
+
+**Still not verified:** Q2 speaker-ID accuracy on real *family* voices (only one synthetic enrollee tested); Q3 wake false-fire; real-mic F1/F12; latency on the target mini-PC (this 41s is a dev-Mac cold number). Anthropic SDK param contract now implicitly validated by the successful live call (params accepted, real reply returned).

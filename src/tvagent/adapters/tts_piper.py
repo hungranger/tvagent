@@ -23,10 +23,19 @@ class PiperTTS:
 
         pp: Any = piper
         if self._model is None:
-            self._model = pp.PiperVoice.load(self.voice)
+            import importlib  # noqa: PLC0415 -- lazy
+            from pathlib import Path  # noqa: PLC0415 -- lazy
+
+            dv: Any = importlib.import_module("piper.download_voices")
+            cache = Path.home() / ".cache" / "tvagent" / "piper"
+            onnx = cache / f"{self.voice}.onnx"
+            if not onnx.exists():
+                cache.mkdir(parents=True, exist_ok=True)
+                dv.download_voice(self.voice, cache)
+            self._model = pp.PiperVoice.load(onnx)
         buf = io.BytesIO()
         with wave.open(buf, "wb") as wf:
-            self._model.synthesize(text, wf)
+            self._model.synthesize_wav(text, wf)
         return buf.getvalue()
 
     def _default_play(self, pcm: bytes) -> None:
