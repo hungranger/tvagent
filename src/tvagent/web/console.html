@@ -142,12 +142,13 @@ function renderEvent(m){
   const s = m.stage;
   if(s === "wake"){ inTurn = true; renderState(); }
   else if(s === "ack") log('<span class="stage">ack</span> "'+m.text+'"');
-  else if(s === "spoken" || s === "ignored" || s === "error"){ inTurn = false; renderState(); }
+  else if(s === "spoken" || s === "ignored" || s === "error" || s === "interrupted"){ inTurn = false; renderState(); }
   if(s === "wake")            log('<span class="stage">wake</span> — heard wake word');
   else if(s === "identified") log('<span class="stage">who</span> → <span class="val">'+m.name+'</span>');
   else if(s === "transcribed")log('<span class="stage">said</span> "'+m.said+'"');
   else if(s === "replied")    log('<span class="stage">reply</span> "'+m.reply+'"');
   else if(s === "spoken")     log('<span class="stage">spoken</span> ✓');
+  else if(s === "interrupted")log('<span class="stage">interrupted</span> ⏹ user spoke over the reply');
   else if(s === "ignored")    log('<span class="stage">ignored</span> no speech detected');
   else if(s === "enroll_start")log('<span class="stage">enroll</span> recording '+m.seconds+'s for '+m.name+'…');
   else if(s === "enroll_done") log('<span class="stage">enroll</span> ✓ '+m.name+' registered');

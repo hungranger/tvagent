@@ -45,3 +45,10 @@ def test_set_voice_switches_voice() -> None:
     tts = KokoroTTS(_synth=lambda _t: b"x")
     tts.set_voice("am_michael")
     assert tts.voice == "am_michael"
+
+
+def test_stop_delegates_to_injected_stopper() -> None:
+    calls: list[int] = []
+    tts = KokoroTTS(_synth=lambda _t: b"x", _stop=lambda: calls.append(1))
+    tts.stop()
+    assert calls == [1]

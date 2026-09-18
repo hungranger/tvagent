@@ -1,7 +1,11 @@
 import threading
+import time
+
+import pytest
 
 from tests.fakes import (
     FakeAudioCapture,
+    FakeBargeIn,
     FakeDisplay,
     FakeLLM,
     FakeMemory,
@@ -59,6 +63,21 @@ def test_paced_reveal_empty_sentence_is_noop():
     shown: list[str] = []
     assert paced_reveal("prefix", "   ", 1.0, shown.append) == "prefix"
     assert shown == []
+
+
+def test_paced_reveal_stops_early_when_should_stop_fires():
+    # Barge-in: while revealing a sentence, should_stop turning True halts the
+    # reveal mid-sentence and returns only the words shown so far.
+    shown: list[str] = []
+    seen = {"n": 0}
+
+    def stop() -> bool:
+        seen["n"] += 1
+        return seen["n"] > 2  # let the first two words through, then interrupt
+
+    out = paced_reveal("Hi.", "one two three four", 0.0, shown.append, should_stop=stop)
+    assert shown == ["Hi. one", "Hi. one two"]  # stopped before "three"
+    assert out == "Hi. one two"  # partial text returned
 
 
 def _orch(
@@ -231,6 +250,100 @@ def test_display_text_streams_in_step_with_the_voice():
         "Hi there. All good.",
     ]
     assert all(r.person == "Dad" for r in disp.renders)
+
+
+def _barge_orch(
+    tts: FakeTTS, barge: FakeBargeIn, reply: str, disp: FakeDisplay | None = None
+) -> Orchestrator:
+    m = FakeMemory()
+    m.upsert_person(Person(id="dad", name="Dad", embedding=[0.1], prefs={}))
+    return Orchestrator(
+        FakeWakeWord(),
+        FakeAudioCapture(AudioClip(samples=b"x", sample_rate=16000)),
+        FakeSpeakerID("dad"),
+        FakeSTT("hi"),
+        FakeLLM(reply),
+        tts,
+        m,
+        disp or FakeDisplay(),
+        barge_in=barge,
+    )
+
+
+def test_barge_in_stops_playback_and_skips_rest_of_reply():
+    tts = FakeTTS()
+    barge = FakeBargeIn(fire_after=1)  # let one word through, then user speaks over it
+    orch = _barge_orch(tts, barge, "one two three. four five six.")
+    events: list[str] = []
+    turn = orch.run_once(on_event=lambda stage, _d: events.append(stage))
+    assert tts.stopped == 1  # playback aborted the instant barge-in fired
+    assert tts.spoken == ["one two three."]  # 2nd sentence never synthesized/spoken
+    assert "interrupted" in events
+    assert "spoken" not in events  # did not complete normally
+    assert turn.replied == "one"  # partial reply persisted as-is
+
+
+class _SlowTTS(FakeTTS):
+    """TTS whose play() blocks like real audio, and whose synth reports a
+    nonzero duration — so a barge-in can land during playback, after the
+    caption reveal has already finished."""
+
+    def synth(self, text: str) -> tuple[bytes, float]:
+        self.spoken.append(text)
+        return text.encode(), 0.02  # tiny but nonzero -> reveal finishes fast
+
+    def play(self, pcm: bytes) -> None:
+        self.played.append(pcm)
+        time.sleep(0.1)  # audio still playing after the words are all revealed
+
+
+def test_barge_in_detected_during_playback_tail_not_only_between_words():
+    # A single-sentence reply: the user talks over the audio *after* the last
+    # word is revealed. Polling only between words would never catch this.
+    tts = _SlowTTS()
+    barge = FakeBargeIn(fire_after=2)  # both words revealed, then user speaks during the tail
+    orch = _barge_orch(tts, barge, "one two.")
+    events: list[str] = []
+    orch.run_once(on_event=lambda stage, _d: events.append(stage))
+    assert tts.stopped == 1
+    assert "interrupted" in events
+    assert "spoken" not in events
+
+
+def test_no_barge_in_lets_full_reply_finish():
+    tts = FakeTTS()
+    barge = FakeBargeIn(fire_after=None)  # user never interrupts
+    orch = _barge_orch(tts, barge, "one two. three four.")
+    events: list[str] = []
+    turn = orch.run_once(on_event=lambda stage, _d: events.append(stage))
+    assert tts.stopped == 0
+    assert tts.spoken == ["one two.", "three four."]
+    assert "interrupted" not in events and "spoken" in events
+    assert turn.replied == "one two. three four."
+    assert barge.armed == 1 and barge.disarmed == 1  # mic armed for the reply, then released
+
+
+def test_interrupt_lets_next_turn_skip_the_wake_word():
+    # After the user barges in, their follow-up should be heard immediately —
+    # without saying the wake word again. FakeWakeWord has ONE wake; if the
+    # follow-up turn re-waited, it would raise StopIteration.
+    tts = FakeTTS()
+    barge = FakeBargeIn(fire_after=1)
+    orch = _barge_orch(tts, barge, "one two three.")  # wake=FakeWakeWord(times=1)
+    orch.run_once()  # wake #1 -> interrupted mid-reply
+    barge.fire_after = None  # the follow-up now completes normally
+    turn = orch.run_once()  # must NOT call wake.wait() again
+    assert turn.replied == "one two three."
+
+
+def test_completed_turn_still_requires_wake_next_time():
+    tts = FakeTTS()
+    barge = FakeBargeIn(fire_after=None)  # completes, no interrupt
+    orch = _barge_orch(tts, barge, "hi there.")  # wake=FakeWakeWord(times=1)
+    orch.run_once()  # consumes the one wake, finishes normally
+    # a normal turn must not leave the wake armed-open; next turn re-waits -> StopIteration
+    with pytest.raises(StopIteration):
+        orch.run_once()
 
 
 def test_identify_and_transcribe_run_concurrently():

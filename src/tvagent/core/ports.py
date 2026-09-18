@@ -30,6 +30,17 @@ class TTS(Protocol):
     def speak(self, text: str) -> None: ...
     def synth(self, text: str) -> tuple[bytes, float]: ...  # (audio, duration seconds)
     def play(self, pcm: bytes) -> None: ...
+    def stop(self) -> None: ...  # abort in-flight playback (barge-in)
+
+
+class BargeInDetector(Protocol):
+    """Watches the mic while the assistant is speaking so the user can talk over
+    it. `arm` starts listening (before a reply), `speaking` is polled during the
+    reply, `disarm` stops (after)."""
+
+    def arm(self) -> None: ...
+    def speaking(self) -> bool: ...
+    def disarm(self) -> None: ...
 
 
 class MemoryStore(Protocol):

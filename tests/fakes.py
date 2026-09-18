@@ -66,6 +66,7 @@ class FakeTTS:
     def __init__(self) -> None:
         self.spoken: list[str] = []
         self.played: list[bytes] = []
+        self.stopped = 0
 
     def speak(self, text: str) -> None:
         self.spoken.append(text)
@@ -76,6 +77,32 @@ class FakeTTS:
 
     def play(self, pcm: bytes) -> None:
         self.played.append(pcm)
+
+    def stop(self) -> None:
+        self.stopped += 1
+
+
+class FakeBargeIn:
+    """Detector fake: speaking() returns True after `fire_after` polls (None=never),
+    so a test can make barge-in trigger deterministically at a chosen word.
+    """
+
+    def __init__(self, fire_after: int | None = None) -> None:
+        self.fire_after = fire_after
+        self.polls = 0
+        self.armed = 0
+        self.disarmed = 0
+
+    def arm(self) -> None:
+        self.armed += 1
+        self.polls = 0
+
+    def disarm(self) -> None:
+        self.disarmed += 1
+
+    def speaking(self) -> bool:
+        self.polls += 1
+        return self.fire_after is not None and self.polls > self.fire_after
 
 
 class FakeDisplay:

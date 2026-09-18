@@ -24,6 +24,7 @@ def build_orchestrator(
         memory=memory,
         display=_get(o, "display", _display),
         wake_ack=os.environ.get("TVAGENT_WAKE_ACK", "Yes?"),  # set "" to disable
+        barge_in=_get(o, "barge_in", _barge_in),
     )
     if warm:
         # Preload heavy local models off the turn path (cold-start ~40s → boot).
@@ -110,6 +111,16 @@ def _tts() -> ports.TTS:
     from tvagent.adapters.tts_piper import PiperTTS  # noqa: PLC0415 -- lazy
 
     return PiperTTS()
+
+
+def _barge_in() -> ports.BargeInDetector | None:
+    import os  # noqa: PLC0415 -- lazy
+
+    if os.environ.get("TVAGENT_BARGE_IN"):  # opt-in; naive stub, needs AEC (see adapter)
+        from tvagent.adapters.bargein_vad import VadBargeIn  # noqa: PLC0415 -- lazy
+
+        return VadBargeIn()
+    return None
 
 
 def _display() -> ports.Display:

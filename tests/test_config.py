@@ -62,3 +62,11 @@ def test_build_warm_ignores_adapters_without_warmup() -> None:
     # plain fakes have no warmup(); warm=True must not raise
     orch = build_orchestrator(_all_fakes(), warm=True)
     assert orch.run_once().replied == "yo"
+
+
+def test_barge_in_off_by_default_and_wired_via_override() -> None:
+    from tests.fakes import FakeBargeIn  # noqa: PLC0415 -- lazy test import
+
+    assert build_orchestrator(_all_fakes()).barge_in is None  # opt-in only
+    det = FakeBargeIn()
+    assert build_orchestrator({**_all_fakes(), "barge_in": det}).barge_in is det
