@@ -33,6 +33,13 @@ class TTS(Protocol):
     def stop(self) -> None: ...  # abort in-flight playback (barge-in)
 
 
+class EchoCanceller(Protocol):
+    """Subtracts the assistant's own playback (far-end) from the mic (near-end)
+    so the barge-in detector doesn't hear the assistant's own voice."""
+
+    def process(self, near: bytes, far: bytes) -> bytes: ...
+
+
 class BargeInDetector(Protocol):
     """Watches the mic while the assistant is speaking so the user can talk over
     it. `arm` starts listening (before a reply), `speaking` is polled during the
