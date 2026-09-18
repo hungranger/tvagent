@@ -1,0 +1,59 @@
+name: ci
+
+# Server-side enforcement of the SAME gate as the local pre-commit/pre-push
+# hooks. Single source of truth: this job runs `pre-commit run` against
+# .pre-commit-config.yaml rather than re-listing ruff/pyright/pytest/etc
+# here — keep tool config changes in .pre-commit-config.yaml / pyproject.toml
+# and this workflow picks them up automatically.
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+jobs:
+  quality-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+        with:
+          fetch-depth: 0  # gate_ratchet.py / suppression_diff.py diff against origin/master
+
+      - name: Fetch base ref
+        # actions/checkout fetches only the PR ref by default; make sure
+        # origin/<base> is resolvable even though fetch-depth:0 usually
+        # covers it (belt-and-braces for shallow/partial runner clones).
+        if: github.event_name == 'pull_request'
+        run: git fetch --no-tags origin "+refs/heads/${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}"
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with:
+          python-version: "3.11"
+
+      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a  # v4
+
+      - name: Gate ratchet (fail on weakened gates)
+        # Stdlib-only script -- no project deps needed, so it can run right
+        # after setup-python. Compares this tree's gate settings against
+        # origin/master and fails if any were weakened. See scripts/gate_ratchet.py.
+        if: github.event_name == 'pull_request'
+        run: python scripts/gate_ratchet.py
+
+      - name: Suppression diff (visibility only, non-blocking)
+        # Prints GitHub annotations for newly-added suppressions in this PR's
+        # diff vs origin/master so a human reviewer sees them inline. Always
+        # exits 0 -- see scripts/suppression_diff.py.
+        if: github.event_name == 'pull_request'
+        run: python scripts/suppression_diff.py
+
+      - name: Install project + test deps
+        run: {{PKG_INSTALL_STEP}}
+
+      - name: Install pre-commit
+        run: pip install pre-commit
+
+      - name: Run pre-commit (pre-commit stage)
+        run: pre-commit run --all-files --hook-stage pre-commit --show-diff-on-failure
+
+      - name: Run pre-commit (pre-push stage)
+        run: pre-commit run --all-files --hook-stage pre-push --show-diff-on-failure

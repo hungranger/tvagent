@@ -1,0 +1,30 @@
+{
+  "name": "master protection",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": { "ref_name": { "include": ["~DEFAULT_BRANCH"], "exclude": [] } },
+  "bypass_actors": [],
+  "rules": [
+    { "type": "deletion" },
+    { "type": "non_fast_forward" },
+    {
+      "type": "pull_request",
+      "parameters": {
+        "required_approving_review_count": 1,
+        "require_code_owner_review": true,
+        "dismiss_stale_reviews_on_push": true,
+        "required_review_thread_resolution": true,
+        "require_last_push_approval": false,
+        "require_extra_approval_for_unattributed_changes": true,
+        "allowed_merge_methods": ["squash", "merge", "rebase"]
+      }
+    },
+    {
+      "type": "required_status_checks",
+      "parameters": {
+        "strict_required_status_checks_policy": true,
+        "required_status_checks": [ { "context": "quality-gate" } ]
+      }
+    }
+  ]
+}
