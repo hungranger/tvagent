@@ -1,0 +1,111 @@
+# Stage map:
+#   pre-commit (fast, every commit): basic hygiene (trailing-whitespace,
+#               end-of-file-fixer, check-yaml, check-toml,
+#               check-merge-conflict, check-added-large-files), ruff lint +
+#               format, gitleaks secret scan.
+#   pre-push   (heavier, before push): pyright, pytest + coverage,
+#               pip-audit, ruff ARG (unused args), vulture (dead code).
+#
+# Self-contained vs. project-venv hooks:
+#   Most hooks below run in a pre-commit-managed isolated env (`language:
+#   python`/a hook repo) and work even if the project `.venv` isn't on PATH.
+#   pyright, pytest-cov and pip-audit stay `language: system` because they
+#   genuinely need the project's installed deps on PATH — activate `.venv`
+#   before pushing.
+default_install_hook_types: [pre-commit, pre-push]
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        stages: [pre-commit]
+      - id: end-of-file-fixer
+        stages: [pre-commit]
+      - id: check-yaml
+        stages: [pre-commit]
+      - id: check-toml
+        stages: [pre-commit]
+      - id: check-merge-conflict
+        stages: [pre-commit]
+      - id: check-added-large-files
+        stages: [pre-commit]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.7
+    hooks:
+      - id: ruff
+        args: [--fix]
+        stages: [pre-commit]
+      - id: ruff-format
+        stages: [pre-commit]
+      - id: ruff
+        name: ruff --select ARG (unused function args)
+        alias: ruff-arg
+        args: [--select, ARG]
+        stages: [pre-push]
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+        stages: [pre-commit]
+
+  - repo: https://github.com/semgrep/semgrep
+    rev: v1.176.0
+    hooks:
+      - id: semgrep
+        name: semgrep (python + security-audit)
+        args: [--config, p/python, --config, p/security-audit, --error]
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
+  - repo: local
+    hooks:
+      - id: pyright
+        name: pyright
+        entry: pyright
+        language: system
+        types: [python]
+        pass_filenames: false
+        stages: [pre-push]
+
+      - id: pytest-cov
+        name: pytest + coverage
+        # Coverage floor lives only in [tool.coverage.report] fail_under.
+        entry: pytest --cov --cov-report=term-missing
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
+      - id: pip-audit
+        name: pip-audit (dependency CVEs)
+        entry: sh -c '{{PKG_AUDIT_EXPORT}} | pip-audit -r /dev/stdin'
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
+      # TEMPLATE-CONDITIONAL: uv-only
+      - id: uv-lock-check
+        name: uv lock --check (lockfile drift)
+        # `uv lock --check` verifies the lockfile is current vs pyproject WITHOUT
+        # mutating the environment. Needs `uv` on PATH.
+        entry: uv lock --check
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
+      - id: vulture
+        name: vulture (dead code)
+        # {{SRC_DIRS}} is rendered here as space-separated paths (not the
+        # TOML-list form used in pyproject.gates.toml) -- see SKILL.md Phase 4.
+        entry: vulture {{SRC_DIRS}} tests .vulture_allowlist.py --min-confidence {{VULTURE_MIN_CONFIDENCE}}
+        language: python
+        additional_dependencies: ["vulture==2.16"]
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
