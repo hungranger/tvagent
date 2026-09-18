@@ -10,6 +10,7 @@ from tvagent.core.models import GUEST, Fact, Person, RenderState, Turn
 _HISTORY_LIMIT = 5
 _DEFAULT_TONE = "friendly"
 _TONE_PREF_KEY = "tone"
+_IDLE_ACK_SECONDS = 45.0  # re-acknowledge the wake word after this much idle time
 
 # Per-stage observer for front-ends (e.g. the console): (stage, payload).
 OnEvent = Callable[[str, dict[str, object]], None]
@@ -76,10 +77,17 @@ class Orchestrator:
         tts: ports.TTS,
         memory: ports.MemoryStore,
         display: ports.Display,
+        wake_ack: str | None = None,
+        idle_ack_seconds: float = _IDLE_ACK_SECONDS,
     ) -> None:
         self.wake, self.capture, self.speaker = wake, capture, speaker
         self.stt, self.llm, self.tts = stt, llm, tts
         self.memory, self.display = memory, display
+        # Spoken acknowledgement on the first wake or after an idle gap, so the
+        # user knows it's listening; suppressed during an active back-and-forth.
+        self.wake_ack = wake_ack
+        self.idle_ack_seconds = idle_ack_seconds
+        self._last_turn_ts: float | None = None
 
     def _build(self, person: Person | None, facts: list[Fact], said: str) -> tuple[str, str]:
         who = person.name if person else "an unknown guest"
@@ -96,6 +104,13 @@ class Orchestrator:
         emit: OnEvent = on_event or (lambda _stage, _data: None)
         self.wake.wait()
         emit("wake", {})
+        now = time.time()
+        if self.wake_ack and (
+            self._last_turn_ts is None or now - self._last_turn_ts > self.idle_ack_seconds
+        ):
+            self.tts.speak(self.wake_ack)
+            emit("ack", {"text": self.wake_ack})
+        self._last_turn_ts = now
         clip = self.capture.capture()
         # Speaker-ID and transcription both consume the same clip independently;
         # run them concurrently (both release the GIL in native code) to shave a

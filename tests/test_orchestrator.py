@@ -164,6 +164,48 @@ def test_on_event_emits_each_stage_in_order():
     assert by_stage["replied"] == {"reply": "Standup at 9"}
 
 
+def _ack_orch(tts: FakeTTS, wake_ack: str | None, idle: float) -> Orchestrator:
+    m = FakeMemory()
+    m.upsert_person(Person(id="dad", name="Dad", embedding=[0.1], prefs={}))
+    return Orchestrator(
+        FakeWakeWord(times=2),
+        FakeAudioCapture(AudioClip(samples=b"x", sample_rate=16000)),
+        FakeSpeakerID("dad"),
+        FakeSTT("hi"),
+        FakeLLM("ok"),
+        tts,
+        m,
+        FakeDisplay(),
+        wake_ack=wake_ack,
+        idle_ack_seconds=idle,
+    )
+
+
+def test_wake_ack_spoken_first_time_then_suppressed_within_conversation():
+    tts = FakeTTS()
+    orch = _ack_orch(tts, "Yes?", 1000.0)
+    orch.run_once()
+    assert "Yes?" in tts.spoken  # first wake -> acknowledged
+    tts.spoken.clear()
+    orch.run_once()
+    assert "Yes?" not in tts.spoken  # still within idle window -> no repeat
+
+
+def test_wake_ack_repeats_after_idle_window():
+    tts = FakeTTS()
+    orch = _ack_orch(tts, "Yes?", -1.0)  # negative window -> always past idle
+    orch.run_once()
+    tts.spoken.clear()
+    orch.run_once()
+    assert "Yes?" in tts.spoken  # idle elapsed -> acknowledged again
+
+
+def test_no_wake_ack_by_default():
+    tts = FakeTTS()
+    _ack_orch(tts, None, 1000.0).run_once()
+    assert "Yes?" not in tts.spoken
+
+
 def test_reply_streamed_to_tts_sentence_by_sentence():
     m = FakeMemory()
     m.upsert_person(Person(id="dad", name="Dad", embedding=[0.1], prefs={}))

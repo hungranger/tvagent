@@ -10,6 +10,8 @@ _MEMORY_ROOT = pathlib.Path("data/memory")
 def build_orchestrator(
     overrides: dict[str, object] | None = None, warm: bool = True
 ) -> Orchestrator:
+    import os  # noqa: PLC0415 -- lazy
+
     o = overrides or {}
     memory = _get(o, "memory", _memory)
     orch = Orchestrator(
@@ -21,6 +23,7 @@ def build_orchestrator(
         tts=_get(o, "tts", _tts),
         memory=memory,
         display=_get(o, "display", _display),
+        wake_ack=os.environ.get("TVAGENT_WAKE_ACK", "Yes?"),  # set "" to disable
     )
     if warm:
         # Preload heavy local models off the turn path (cold-start ~40s → boot).

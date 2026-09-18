@@ -141,6 +141,7 @@ function handle(m){
 function renderEvent(m){
   const s = m.stage;
   if(s === "wake"){ inTurn = true; renderState(); }
+  else if(s === "ack") log('<span class="stage">ack</span> "'+m.text+'"');
   else if(s === "spoken" || s === "ignored" || s === "error"){ inTurn = false; renderState(); }
   if(s === "wake")            log('<span class="stage">wake</span> — heard wake word');
   else if(s === "identified") log('<span class="stage">who</span> → <span class="val">'+m.name+'</span>');
