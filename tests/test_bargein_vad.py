@@ -43,3 +43,18 @@ def test_disarm_resets_and_is_safe() -> None:
     det.arm()
     det.disarm()
     assert det.speaking() is False
+
+
+class _BoomSource:
+    def frames(self) -> Iterator[tuple[bytes, bool]]:
+        raise RuntimeError("mic busy")  # raises when the listen loop calls frames()
+
+
+def test_listen_error_is_captured_not_swallowed() -> None:
+    # A mic failure in the background thread must be recorded (so the console can
+    # show why barge-in isn't working), not silently kill the thread.
+    det = VadBargeIn(onset_frames=3, _source=_BoomSource())
+    det.arm()
+    _drain(det)
+    assert det.speaking() is False
+    assert det.error is not None and "mic busy" in det.error

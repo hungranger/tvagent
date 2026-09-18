@@ -151,7 +151,7 @@ class Orchestrator:
             return Turn(person_id=person_id, ts=time.time(), said=said, replied="")
         system, user = self._build(person, facts, said)
         pairs = [(h.said, h.replied) for h in history]
-        reply, interrupted = self._stream_reply(system, user, pairs, name)
+        reply, interrupted = self._stream_reply(system, user, pairs, name, emit)
         turn = Turn(person_id=person_id, ts=time.time(), said=said, replied=reply)
         self.memory.save_turn(turn)
         if interrupted:
@@ -163,7 +163,7 @@ class Orchestrator:
         return turn
 
     def _stream_reply(
-        self, system: str, user: str, pairs: list[tuple[str, str]], name: str
+        self, system: str, user: str, pairs: list[tuple[str, str]], name: str, emit: OnEvent
     ) -> tuple[str, bool]:
         """Stream the reply sentence-by-sentence: synthesize each, play it, and
         reveal its words paced across the audio's duration so the caption keeps
@@ -191,6 +191,7 @@ class Orchestrator:
         reply, rendered = "", False
         if self.barge_in is not None:
             self.barge_in.arm()
+            emit("barge_armed", {})  # proves barge-in is live this turn
         try:
             for sentence in iter_sentences(self.llm.stream(system, user, pairs)):
                 pcm, duration = self.tts.synth(sentence)
@@ -202,11 +203,18 @@ class Orchestrator:
                 if barge.is_set():
                     break
         finally:
-            if self.barge_in is not None:
-                self.barge_in.disarm()
+            self._disarm_barge(emit)
         if not rendered:  # nothing streamed -> refresh the screen once
             show(reply)
         return reply, barge.is_set()
+
+    def _disarm_barge(self, emit: OnEvent) -> None:
+        if self.barge_in is None:
+            return
+        self.barge_in.disarm()
+        err = getattr(self.barge_in, "error", None)
+        if err:  # mic failure in the listen thread -> tell the UI why barge-in is dead
+            emit("error", {"message": f"barge-in: {err}"})
 
     def _await_playback(
         self, player: threading.Thread, should_stop: Callable[[], bool] | None

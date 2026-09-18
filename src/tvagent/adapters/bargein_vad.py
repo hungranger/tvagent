@@ -20,10 +20,12 @@ class VadBargeIn:
         self._speaking = threading.Event()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
+        self.error: str | None = None  # last listen failure, for the console to surface
 
     def arm(self) -> None:
         self._speaking.clear()
         self._stop.clear()
+        self.error = None
         self._thread = threading.Thread(target=self._listen, daemon=True)
         self._thread.start()
 
@@ -38,10 +40,13 @@ class VadBargeIn:
 
     def _listen(self) -> None:
         run = 0
-        for _frame, is_speech in self._source.frames():
-            if self._stop.is_set():
-                return
-            run = run + 1 if is_speech else 0
-            if run >= self._onset:
-                self._speaking.set()
-                return
+        try:
+            for _frame, is_speech in self._source.frames():
+                if self._stop.is_set():
+                    return
+                run = run + 1 if is_speech else 0
+                if run >= self._onset:
+                    self._speaking.set()
+                    return
+        except Exception as exc:
+            self.error = f"{type(exc).__name__}: {exc}"
