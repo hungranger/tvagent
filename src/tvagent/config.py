@@ -62,7 +62,12 @@ def _speaker(memory: ports.MemoryStore) -> ports.SpeakerID:
 def _stt() -> ports.STT:
     import os  # noqa: PLC0415 -- lazy
 
-    if os.environ.get("TVAGENT_STT") == "mlx":  # Metal-accelerated, mac-only opt-in
+    stt = os.environ.get("TVAGENT_STT")
+    if stt == "parakeet":  # SOTA English ASR on MLX, mac-only opt-in
+        from tvagent.adapters.stt_parakeet import ParakeetSTT  # noqa: PLC0415 -- lazy
+
+        return ParakeetSTT()
+    if stt == "mlx":  # Metal-accelerated whisper, mac-only opt-in
         from tvagent.adapters.stt_mlx import MlxWhisperSTT  # noqa: PLC0415 -- lazy
 
         return MlxWhisperSTT()

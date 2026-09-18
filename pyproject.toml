@@ -146,6 +146,7 @@ modules = [
     "tvagent.adapters.llm_openai",
     "tvagent.adapters.stt_whisper",
     "tvagent.adapters.stt_mlx",
+    "tvagent.adapters.stt_parakeet",
     "tvagent.adapters.speakerid_ecapa",
     "tvagent.adapters.wakeword_oww",
     "tvagent.adapters.audio_vad",
