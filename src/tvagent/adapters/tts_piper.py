@@ -34,6 +34,12 @@ class PiperTTS:
             dv.download_voice(self.voice, cache)
         return pp.PiperVoice.load(onnx)
 
+    def set_voice(self, voice: str) -> None:
+        # Console voice picker: drop the cached model so the next utterance
+        # reloads (and, on the default synth, downloads) under the new voice.
+        self.voice = voice
+        self._model = None
+
     def warmup(self) -> None:
         # Download+load the Piper voice at boot so the first turn doesn't pay for it.
         if self._using_default_synth and self._model is None:

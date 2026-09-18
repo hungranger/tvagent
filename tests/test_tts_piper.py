@@ -28,6 +28,16 @@ def test_default_voice_is_stored():
     assert PiperTTS().voice == "en_US-amy-medium"
 
 
+def test_set_voice_changes_voice_and_clears_cached_model() -> None:
+    # console voice picker: switching voice must take effect on the next utterance,
+    # so the cached model is dropped and reloaded lazily under the new voice.
+    tts = PiperTTS()
+    tts._model = "OLD"  # pyright: ignore[reportPrivateUsage]  # pretend a voice was loaded
+    tts.set_voice("en_US-ryan-high")
+    assert tts.voice == "en_US-ryan-high"
+    assert tts._model is None  # pyright: ignore[reportPrivateUsage]
+
+
 def test_warmup_noop_with_injected_synth() -> None:
     # warmup preloads/downloads the real Piper voice; with an injected synth
     # there is nothing to preload, so it must be a safe no-op.
