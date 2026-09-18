@@ -93,3 +93,38 @@ def test_edit_by_nested_path_basename_asks():
     # basename match works regardless of directory depth
     out = run({"tool_name": "Edit", "tool_input": {"file_path": "any/where/uv.lock"}})
     assert asks(out)
+
+
+# --- Category B: gate-bypass / merge / protection-mutating commands ---
+
+
+def test_bash_gh_pr_merge_asks():
+    # No write indicator and no protected file — must still ask.
+    out = run({"tool_name": "Bash", "tool_input": {"command": "gh pr merge 15"}})
+    assert asks(out)
+
+
+def test_bash_git_push_master_asks():
+    out = run({"tool_name": "Bash", "tool_input": {"command": "git push origin master"}})
+    assert asks(out)
+
+
+def test_bash_git_commit_no_verify_asks():
+    out = run({"tool_name": "Bash", "tool_input": {"command": "git commit --no-verify -m x"}})
+    assert asks(out)
+
+
+def test_bash_gh_api_rulesets_asks():
+    out = run({"tool_name": "Bash", "tool_input": {"command": "gh api repos/o/r/rulesets -X POST"}})
+    assert asks(out)
+
+
+def test_bash_git_push_feature_branch_no_output():
+    # "master" as a substring of a branch name must NOT trigger (word boundary).
+    out = run({"tool_name": "Bash", "tool_input": {"command": "git push origin feat/no-master-x"}})
+    assert out == ""
+
+
+def test_bash_git_commit_normal_no_output():
+    out = run({"tool_name": "Bash", "tool_input": {"command": "git commit -m x"}})
+    assert out == ""

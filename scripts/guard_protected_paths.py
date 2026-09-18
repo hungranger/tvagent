@@ -59,6 +59,18 @@ _WRITE_INDICATORS = re.compile(
     r"|\bcp\b|\brm\b|python[0-9.]*\s+-c\b|\bapplypatch\b|\bpatch\b)"
 )
 
+# Category B: gate-bypass / merge / protection-mutating commands. Evaluated for
+# ANY Bash command independently of write indicators and protected files —
+# these ask because at 0 required approvals the agent must still route a merge
+# or a protection change through the human. Heuristic, not a shell parser.
+_GH_PR_MERGE = re.compile(r"\bgh\s+pr\s+merge\b")
+_GH_API = re.compile(r"\bgh\s+api\b")
+_GH_API_PROTECT = re.compile(r"\b(merge|rulesets|branches/[^\s]*/protection)\b")
+_GIT_PUSH = re.compile(r"\bgit\s+push\b")
+# master/main as a ref token (space/colon-delimited), so "feat/no-master-x" is
+# NOT swept in — a hyphen is a \b boundary, so \bmaster\b alone would false-fire.
+_PUSH_PROTECTED_REF = re.compile(r"(?:^|[\s:])(?:master|main)(?:\s|$)")
+
 
 def _extra_basenames() -> set[str]:
     """Merge in .claude/protected-paths.json (a JSON list) if present."""
@@ -89,8 +101,21 @@ def _bash_touches_protected(command: str, basenames: set[str]) -> bool:
     return any(token in command for token in _protected_tokens(basenames))
 
 
+def _bash_bypasses_gate(command: str) -> str | None:
+    """Reason string if a Bash command bypasses/merges/mutates gates, else None."""
+    if _GH_PR_MERGE.search(command):
+        return "merges a PR"
+    if "--no-verify" in command:
+        return "bypasses git hooks (--no-verify)"
+    if _GIT_PUSH.search(command) and _PUSH_PROTECTED_REF.search(command):
+        return "pushes directly to master/main"
+    if _GH_API.search(command) and _GH_API_PROTECT.search(command):
+        return "mutates branch protection / rulesets"
+    return None
+
+
 def _decision(payload: dict[str, object]) -> str | None:
-    """Return the protected file/reason if an ask is warranted, else None."""
+    """Return the full ask reason if an ask is warranted, else None."""
     tool_name = payload.get("tool_name")
     raw_input = payload.get("tool_input")
     if not isinstance(tool_name, str) or not isinstance(raw_input, dict):
@@ -101,11 +126,24 @@ def _decision(payload: dict[str, object]) -> str | None:
     if tool_name in {"Edit", "Write", "MultiEdit"}:
         file_path = tool_input.get("file_path")
         if isinstance(file_path, str) and _is_protected_path(file_path, basenames):
-            return file_path
+            return (
+                f"Protected gate/config file: {file_path}. "
+                "A human must approve edits to quality-gate infrastructure."
+            )
     elif tool_name == "Bash":
         command = tool_input.get("command")
-        if isinstance(command, str) and _bash_touches_protected(command, basenames):
-            return command
+        if isinstance(command, str):
+            if _bash_touches_protected(command, basenames):
+                return (
+                    f"Protected gate/config file touched by: {command}. "
+                    "A human must approve edits to quality-gate infrastructure."
+                )
+            bypass = _bash_bypasses_gate(command)
+            if bypass is not None:
+                return (
+                    f"Command {bypass}: {command}. "
+                    "A human must approve merges / pushes / protection changes."
+                )
     return None
 
 
@@ -114,17 +152,14 @@ def main() -> None:
         raw: object = json.load(sys.stdin)
         if not isinstance(raw, dict):
             return
-        target = _decision(cast("dict[str, object]", raw))
-        if target is None:
+        reason = _decision(cast("dict[str, object]", raw))
+        if reason is None:
             return  # fall through to normal permission handling (no "allow"!)
         out = {
             "hookSpecificOutput": {
                 "hookEventName": "PreToolUse",
                 "permissionDecision": "ask",
-                "permissionDecisionReason": (
-                    f"Protected gate/config file: {target}. "
-                    "A human must approve edits to quality-gate infrastructure."
-                ),
+                "permissionDecisionReason": reason,
             }
         }
         print(json.dumps(out))
