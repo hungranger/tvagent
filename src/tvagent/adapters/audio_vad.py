@@ -6,7 +6,7 @@ from tvagent.core.models import AudioClip
 
 class VadCapture:
     def __init__(
-        self, sample_rate: int = 16000, silence_limit: int = 15, _source: Any = None
+        self, sample_rate: int = 16000, silence_limit: int = 25, _source: Any = None
     ) -> None:
         self.sample_rate, self.silence_limit = sample_rate, silence_limit
         self._source: Any = _source or MicSource(sample_rate)

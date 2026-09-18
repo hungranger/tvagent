@@ -39,6 +39,7 @@ def _status(orch: Orchestrator) -> dict[str, Any]:
         "threshold": getattr(speaker, "threshold", None),
         "margin": getattr(speaker, "margin", None),
         "voice": getattr(tts, "voice", None),
+        "wake": getattr(orch.wake, "model_name", None),
         "people": [p.name for p in orch.memory.list_people()],
     }
 

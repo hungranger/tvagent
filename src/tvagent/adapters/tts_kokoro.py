@@ -3,10 +3,19 @@ import wave
 from collections.abc import Callable
 from typing import Any
 
-_VOICE = "en_US-amy-medium"
+_VOICE = "af_heart"  # Kokoro's flagship voice
+_RELEASE = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0"
+_MODEL_URL = f"{_RELEASE}/kokoro-v1.0.onnx"
+_VOICES_URL = f"{_RELEASE}/voices-v1.0.bin"
 
 
-class PiperTTS:
+class KokoroTTS:
+    """TTS via Kokoro-82M (kokoro-onnx). Much more natural than Piper, still
+    real-time on-device. Opt-in (TVAGENT_TTS=kokoro); default stays Piper.
+    Same port as PiperTTS: speak / synth(audio, duration) / play, so the karaoke
+    caption pacing keeps working.
+    """
+
     def __init__(
         self,
         voice: str = _VOICE,
@@ -20,37 +29,42 @@ class PiperTTS:
         self._model: Any = None
 
     def _load_model(self) -> Any:
-        import importlib  # noqa: PLC0415 -- lazy
+        import urllib.request  # noqa: PLC0415 -- lazy
         from pathlib import Path  # noqa: PLC0415 -- lazy
 
-        import piper  # noqa: PLC0415 -- lazy
+        import kokoro_onnx  # noqa: PLC0415 -- lazy
 
-        pp: Any = piper
-        dv: Any = importlib.import_module("piper.download_voices")
-        cache = Path.home() / ".cache" / "tvagent" / "piper"
-        onnx = cache / f"{self.voice}.onnx"
+        kk: Any = kokoro_onnx
+        cache = Path.home() / ".cache" / "tvagent" / "kokoro"
+        cache.mkdir(parents=True, exist_ok=True)
+        onnx = cache / "kokoro-v1.0.onnx"
+        voices = cache / "voices-v1.0.bin"
+        # URLs are fixed https release constants (not user input), so semgrep's
+        # dynamic-urllib file:// SSRF concern does not apply here.
         if not onnx.exists():
-            cache.mkdir(parents=True, exist_ok=True)
-            dv.download_voice(self.voice, cache)
-        return pp.PiperVoice.load(onnx)
-
-    def set_voice(self, voice: str) -> None:
-        # Console voice picker: drop the cached model so the next utterance
-        # reloads (and, on the default synth, downloads) under the new voice.
-        self.voice = voice
-        self._model = None
+            urllib.request.urlretrieve(_MODEL_URL, onnx)  # nosemgrep
+        if not voices.exists():
+            urllib.request.urlretrieve(_VOICES_URL, voices)  # nosemgrep
+        return kk.Kokoro(str(onnx), str(voices))
 
     def warmup(self) -> None:
-        # Download+load the Piper voice at boot so the first turn doesn't pay for it.
         if self._using_default_synth and self._model is None:
             self._model = self._load_model()
 
     def _default_synth(self, text: str) -> bytes:
+        import numpy as np  # noqa: PLC0415 -- lazy
+
         if self._model is None:
             self._model = self._load_model()
+        npx: Any = np
+        samples, rate = self._model.create(text, voice=self.voice, lang="en-us")
+        pcm16 = (npx.clip(samples, -1.0, 1.0) * 32767).astype(np.int16)
         buf = io.BytesIO()
         with wave.open(buf, "wb") as wf:
-            self._model.synthesize_wav(text, wf)
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(rate)
+            wf.writeframes(pcm16.tobytes())
         return buf.getvalue()
 
     def _default_play(self, pcm: bytes) -> None:
@@ -64,14 +78,16 @@ class PiperTTS:
             sd.play(data, wf.getframerate())
             sd.wait()
 
+    def set_voice(self, voice: str) -> None:
+        # All voices live in one voices.bin, so no model reload is needed.
+        self.voice = voice
+
     def speak(self, text: str) -> None:
         if not text.strip():
             return
         self._play(self._synth(text))
 
     def synth(self, text: str) -> tuple[bytes, float]:
-        # Return the WAV audio plus its playback duration (seconds), so callers can
-        # pace an on-screen caption to the spoken length.
         if not text.strip():
             return b"", 0.0
         pcm = self._synth(text)

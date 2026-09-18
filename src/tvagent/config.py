@@ -10,6 +10,8 @@ _MEMORY_ROOT = pathlib.Path("data/memory")
 def build_orchestrator(
     overrides: dict[str, object] | None = None, warm: bool = True
 ) -> Orchestrator:
+    import os  # noqa: PLC0415 -- lazy
+
     o = overrides or {}
     memory = _get(o, "memory", _memory)
     orch = Orchestrator(
@@ -21,6 +23,7 @@ def build_orchestrator(
         tts=_get(o, "tts", _tts),
         memory=memory,
         display=_get(o, "display", _display),
+        wake_ack=os.environ.get("TVAGENT_WAKE_ACK", "Yes?"),  # set "" to disable
     )
     if warm:
         # Preload heavy local models off the turn path (cold-start ~40s → boot).
@@ -60,18 +63,50 @@ def _speaker(memory: ports.MemoryStore) -> ports.SpeakerID:
 
 
 def _stt() -> ports.STT:
+    import os  # noqa: PLC0415 -- lazy
+
+    stt = os.environ.get("TVAGENT_STT")
+    if stt == "parakeet":  # SOTA English ASR on MLX, mac-only opt-in
+        from tvagent.adapters.stt_parakeet import ParakeetSTT  # noqa: PLC0415 -- lazy
+
+        return ParakeetSTT()
+    if stt == "mlx":  # Metal-accelerated whisper, mac-only opt-in
+        from tvagent.adapters.stt_mlx import MlxWhisperSTT  # noqa: PLC0415 -- lazy
+
+        return MlxWhisperSTT()
     from tvagent.adapters.stt_whisper import WhisperSTT  # noqa: PLC0415 -- lazy
 
     return WhisperSTT()
 
 
 def _llm() -> ports.LLM:
+    import os  # noqa: PLC0415 -- lazy
+
+    backend = os.environ.get("TVAGENT_LLM", "claude")
+    if backend == "local":  # Ollama or any OpenAI-compatible server on localhost
+        from tvagent.adapters.llm_openai import OpenAILLM  # noqa: PLC0415 -- lazy
+
+        return OpenAILLM(model=os.environ.get("TVAGENT_LLM_MODEL", "llama3.2"))
+    if backend == "cerebras":
+        from tvagent.adapters.llm_openai import OpenAILLM  # noqa: PLC0415 -- lazy
+
+        return OpenAILLM(
+            base_url="https://api.cerebras.ai/v1",
+            api_key=os.environ.get("CEREBRAS_API_KEY"),
+            model=os.environ.get("TVAGENT_LLM_MODEL", "llama-3.3-70b"),
+        )
     from tvagent.adapters.llm_claude import ClaudeLLM  # noqa: PLC0415 -- lazy
 
     return ClaudeLLM()
 
 
 def _tts() -> ports.TTS:
+    import os  # noqa: PLC0415 -- lazy
+
+    if os.environ.get("TVAGENT_TTS") == "kokoro":  # more natural, opt-in
+        from tvagent.adapters.tts_kokoro import KokoroTTS  # noqa: PLC0415 -- lazy
+
+        return KokoroTTS()
     from tvagent.adapters.tts_piper import PiperTTS  # noqa: PLC0415 -- lazy
 
     return PiperTTS()

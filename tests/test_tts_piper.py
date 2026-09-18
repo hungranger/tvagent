@@ -1,6 +1,37 @@
+import io
+import wave
 from typing import Any
 
 from tvagent.adapters.tts_piper import PiperTTS
+
+
+def _wav(seconds: float, rate: int = 16000) -> bytes:
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(b"\x00\x00" * int(seconds * rate))
+    return buf.getvalue()
+
+
+def test_synth_returns_audio_and_its_duration() -> None:
+    wav = _wav(1.5)
+    pcm, dur = PiperTTS(_synth=lambda _t: wav).synth("hello")
+    assert pcm == wav
+    assert abs(dur - 1.5) < 0.01  # duration read from the WAV, for caption pacing
+
+
+def test_synth_empty_text_is_zero() -> None:
+    assert PiperTTS(_synth=lambda _t: b"x").synth("   ") == (b"", 0.0)
+
+
+def test_play_delegates_and_skips_empty() -> None:
+    played: list[bytes] = []
+    tts = PiperTTS(_synth=lambda _t: b"x", _play=played.append)
+    tts.play(b"abc")
+    tts.play(b"")
+    assert played == [b"abc"]
 
 
 def test_speak_synthesizes_then_plays():

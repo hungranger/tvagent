@@ -1,3 +1,5 @@
+from collections.abc import Iterator
+
 from tvagent.core.models import GUEST, AudioClip, Fact, Person, RenderState, Turn
 
 
@@ -53,21 +55,37 @@ class FakeLLM:
         self.last_system, self.last_user, self.last_history = system, user, history
         return self._reply
 
+    def stream(self, system: str, user: str, history: list[tuple[str, str]]) -> Iterator[str]:
+        self.last_system, self.last_user, self.last_history = system, user, history
+        # Emit token-by-token like a real streaming LLM, not one lump.
+        for i, word in enumerate(self._reply.split()):
+            yield word if i == 0 else " " + word
+
 
 class FakeTTS:
     def __init__(self) -> None:
         self.spoken: list[str] = []
+        self.played: list[bytes] = []
 
     def speak(self, text: str) -> None:
         self.spoken.append(text)
+
+    def synth(self, text: str) -> tuple[bytes, float]:
+        self.spoken.append(text)  # record what would be voiced
+        return text.encode(), 0.0  # zero duration -> paced_reveal won't wait in tests
+
+    def play(self, pcm: bytes) -> None:
+        self.played.append(pcm)
 
 
 class FakeDisplay:
     def __init__(self) -> None:
         self.last: RenderState | None = None
+        self.renders: list[RenderState] = []
 
     def render(self, state: RenderState) -> None:
         self.last = state
+        self.renders.append(state)
 
 
 class FakeMemory:

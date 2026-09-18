@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from typing import Any
 
 _MODEL = "claude-opus-5"
@@ -17,17 +18,30 @@ class ClaudeLLM:
             client = an.Anthropic()
         self.client = client
 
-    def respond(self, system: str, user: str, history: list[tuple[str, str]]) -> str:
+    def _messages(self, user: str, history: list[tuple[str, str]]) -> list[dict[str, str]]:
         messages: list[dict[str, str]] = []
         for said, replied in history:
             messages.append({"role": "user", "content": said})
             messages.append({"role": "assistant", "content": replied})
         messages.append({"role": "user", "content": user})
+        return messages
+
+    def respond(self, system: str, user: str, history: list[tuple[str, str]]) -> str:
         msg = self.client.messages.create(
             model=self.model,
             max_tokens=self.max_tokens,
             system=system,
             output_config={"effort": _EFFORT},
-            messages=messages,
+            messages=self._messages(user, history),
         )
         return "".join(b.text for b in msg.content if getattr(b, "type", None) == "text").strip()
+
+    def stream(self, system: str, user: str, history: list[tuple[str, str]]) -> Iterator[str]:
+        with self.client.messages.stream(
+            model=self.model,
+            max_tokens=self.max_tokens,
+            system=system,
+            output_config={"effort": _EFFORT},
+            messages=self._messages(user, history),
+        ) as streamed:
+            yield from streamed.text_stream

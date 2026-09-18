@@ -1,3 +1,5 @@
+import threading
+
 from tests.fakes import (
     FakeAudioCapture,
     FakeDisplay,
@@ -9,7 +11,54 @@ from tests.fakes import (
     FakeWakeWord,
 )
 from tvagent.core.models import GUEST, AudioClip, Fact, Person
-from tvagent.core.orchestrator import Orchestrator
+from tvagent.core.orchestrator import Orchestrator, has_speech, iter_sentences, paced_reveal
+
+
+def test_has_speech_rejects_empty_and_nonsense():
+    assert has_speech("what's my day") is True
+    assert has_speech("yes") is True
+    assert has_speech("") is False
+    assert has_speech("   ") is False
+    assert has_speech("...") is False  # whisper noise artifact
+    assert has_speech(" - . ") is False
+
+
+def test_blank_transcript_is_ignored_no_llm_no_speech():
+    m = FakeMemory()
+    m.upsert_person(Person(id="dad", name="Dad", embedding=[0.1], prefs={}))
+    orch, llm, tts, _disp, *_rest = _orch(m, "dad", said="   ", reply="SHOULD NOT SPEAK")
+    events: list[str] = []
+    turn = orch.run_once(on_event=lambda s, _d: events.append(s))
+    assert tts.spoken == []  # nothing spoken
+    assert llm.last_user is None  # LLM never called
+    assert turn.replied == ""  # no reply
+    assert m.recent_turns("dad", 10) == []  # noise not persisted
+    assert "ignored" in events and "replied" not in events and "spoken" not in events
+
+
+def test_iter_sentences_splits_on_boundaries_and_flushes_remainder():
+    chunks = ["Hello wor", "ld. How ", "are you? ", "Fine"]
+    assert list(iter_sentences(chunks)) == ["Hello world.", "How are you?", "Fine"]
+
+
+def test_iter_sentences_empty_stream_yields_nothing():
+    assert list(iter_sentences([])) == []
+
+
+def test_paced_reveal_appends_words_over_duration():
+    shown: list[str] = []
+    slept: list[float] = []
+    out = paced_reveal("Hi there.", "All good now", 3.0, shown.append, slept.append)
+    # words appended to the prefix, one render each
+    assert shown == ["Hi there. All", "Hi there. All good", "Hi there. All good now"]
+    assert out == "Hi there. All good now"
+    assert slept == [1.0, 1.0, 1.0]  # 3s spread evenly across 3 words -> paced to audio
+
+
+def test_paced_reveal_empty_sentence_is_noop():
+    shown: list[str] = []
+    assert paced_reveal("prefix", "   ", 1.0, shown.append) == "prefix"
+    assert shown == []
 
 
 def _orch(
@@ -113,6 +162,110 @@ def test_on_event_emits_each_stage_in_order():
     assert by_stage["identified"] == {"person_id": "dad", "name": "Dad"}
     assert by_stage["transcribed"] == {"said": "what's my day"}
     assert by_stage["replied"] == {"reply": "Standup at 9"}
+
+
+def _ack_orch(tts: FakeTTS, wake_ack: str | None, idle: float) -> Orchestrator:
+    m = FakeMemory()
+    m.upsert_person(Person(id="dad", name="Dad", embedding=[0.1], prefs={}))
+    return Orchestrator(
+        FakeWakeWord(times=2),
+        FakeAudioCapture(AudioClip(samples=b"x", sample_rate=16000)),
+        FakeSpeakerID("dad"),
+        FakeSTT("hi"),
+        FakeLLM("ok"),
+        tts,
+        m,
+        FakeDisplay(),
+        wake_ack=wake_ack,
+        idle_ack_seconds=idle,
+    )
+
+
+def test_wake_ack_spoken_first_time_then_suppressed_within_conversation():
+    tts = FakeTTS()
+    orch = _ack_orch(tts, "Yes?", 1000.0)
+    orch.run_once()
+    assert "Yes?" in tts.spoken  # first wake -> acknowledged
+    tts.spoken.clear()
+    orch.run_once()
+    assert "Yes?" not in tts.spoken  # still within idle window -> no repeat
+
+
+def test_wake_ack_repeats_after_idle_window():
+    tts = FakeTTS()
+    orch = _ack_orch(tts, "Yes?", -1.0)  # negative window -> always past idle
+    orch.run_once()
+    tts.spoken.clear()
+    orch.run_once()
+    assert "Yes?" in tts.spoken  # idle elapsed -> acknowledged again
+
+
+def test_no_wake_ack_by_default():
+    tts = FakeTTS()
+    _ack_orch(tts, None, 1000.0).run_once()
+    assert "Yes?" not in tts.spoken
+
+
+def test_reply_streamed_to_tts_sentence_by_sentence():
+    m = FakeMemory()
+    m.upsert_person(Person(id="dad", name="Dad", embedding=[0.1], prefs={}))
+    orch, _llm, tts, disp, *_rest = _orch(m, "dad", said="hi", reply="Hi there. All good.")
+    turn = orch.run_once()
+    assert tts.spoken == ["Hi there.", "All good."]  # each sentence spoken as it completes
+    assert turn.replied == "Hi there. All good."
+    assert disp.last is not None and disp.last.text == "Hi there. All good."
+
+
+def test_display_text_streams_in_step_with_the_voice():
+    # The TV caption should grow sentence-by-sentence in sync with the spoken
+    # audio, not appear all at once at the end.
+    m = FakeMemory()
+    m.upsert_person(Person(id="dad", name="Dad", embedding=[0.1], prefs={}))
+    orch, _llm, _tts, disp, *_rest = _orch(m, "dad", said="hi", reply="Hi there. All good.")
+    orch.run_once()
+    # caption types out word-by-word (one render per token), ending at the full reply
+    assert [r.text for r in disp.renders] == [
+        "Hi",
+        "Hi there.",
+        "Hi there. All",
+        "Hi there. All good.",
+    ]
+    assert all(r.person == "Dad" for r in disp.renders)
+
+
+def test_identify_and_transcribe_run_concurrently():
+    # Both consume the same clip independently; running them in parallel shaves a
+    # stage off the turn. Proven with a 2-party barrier: if run_once called them
+    # sequentially, the first would block on the barrier and time out (BrokenBarrier),
+    # failing the test; only concurrent execution lets both arrive and proceed.
+    barrier = threading.Barrier(2, timeout=3)
+    clip = AudioClip(samples=b"x", sample_rate=16000)
+
+    class _BarrierSpeaker:
+        def identify(self, clip: AudioClip) -> str:
+            barrier.wait()
+            return "guest"
+
+        def enroll(self, name: str, clips: list[AudioClip]) -> Person:
+            return Person(id=name.lower(), name=name, embedding=[0.0], prefs={})
+
+    class _BarrierSTT:
+        def transcribe(self, clip: AudioClip) -> str:
+            barrier.wait()
+            return "hello"
+
+    orch = Orchestrator(
+        FakeWakeWord(),
+        FakeAudioCapture(clip),
+        _BarrierSpeaker(),
+        _BarrierSTT(),
+        FakeLLM("hi"),
+        FakeTTS(),
+        FakeMemory(),
+        FakeDisplay(),
+    )
+    turn = orch.run_once()
+    assert turn.said == "hello" and turn.replied == "hi"
 
 
 def test_on_event_reports_guest_for_unknown_speaker():

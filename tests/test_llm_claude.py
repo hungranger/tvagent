@@ -9,6 +9,17 @@ class _StubClient:
         self.messages = _StubMessages(self)
 
 
+class _StreamCtx:
+    def __init__(self, texts: list[str]) -> None:
+        self._texts = texts
+
+    def __enter__(self) -> Any:
+        return type("S", (), {"text_stream": iter(self._texts)})()
+
+    def __exit__(self, *exc: object) -> bool:
+        return False
+
+
 class _StubMessages:
     def __init__(self, outer: _StubClient) -> None:
         self.outer = outer
@@ -24,6 +35,10 @@ class _StubMessages:
             content: ClassVar = [Block()]
 
         return Msg()
+
+    def stream(self, **kwargs: Any) -> Any:
+        self.outer.seen = kwargs
+        return _StreamCtx(["hi ", "Dad"])
 
 
 def test_respond_extracts_text_and_sends_system():
@@ -52,6 +67,13 @@ def test_respond_sends_max_tokens_and_output_config():
     llm.respond("sys", "hi", [])
     assert stub.seen["max_tokens"] == 77
     assert stub.seen["output_config"] == {"effort": "low"}
+
+
+def test_stream_yields_text_deltas_and_sends_system():
+    stub = _StubClient()
+    out = list(ClaudeLLM(client=stub).stream("You are talking to Dad.", "hi", []))
+    assert out == ["hi ", "Dad"]
+    assert stub.seen["system"] == "You are talking to Dad."
 
 
 def test_respond_joins_only_text_blocks_in_order():
