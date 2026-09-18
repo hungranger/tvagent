@@ -1,4 +1,5 @@
 import time
+from collections.abc import Callable
 
 from tvagent.core import ports
 from tvagent.core.models import GUEST, Fact, Person, RenderState, Turn
@@ -6,6 +7,9 @@ from tvagent.core.models import GUEST, Fact, Person, RenderState, Turn
 _HISTORY_LIMIT = 5
 _DEFAULT_TONE = "friendly"
 _TONE_PREF_KEY = "tone"
+
+# Per-stage observer for front-ends (e.g. the console): (stage, payload).
+OnEvent = Callable[[str, dict[str, object]], None]
 
 
 class Orchestrator:
@@ -35,8 +39,10 @@ class Orchestrator:
             lines.append("What you remember about them: " + "; ".join(f.text for f in facts))
         return "\n".join(lines), said
 
-    def run_once(self) -> Turn:
+    def run_once(self, on_event: OnEvent | None = None) -> Turn:
+        emit: OnEvent = on_event or (lambda _stage, _data: None)
         self.wake.wait()
+        emit("wake", {})
         clip = self.capture.capture()
         person_id = self.speaker.identify(clip)
         said = self.stt.transcribe(clip)
@@ -48,10 +54,15 @@ class Orchestrator:
         else:
             facts = self.memory.get_facts(person.id)
             history = self.memory.recent_turns(person.id, _HISTORY_LIMIT)
+        name = person.name if person else "Guest"
+        emit("identified", {"person_id": person_id, "name": name})
+        emit("transcribed", {"said": said})
         system, user = self._build(person, facts, said)
         reply = self.llm.respond(system, user, [(h.said, h.replied) for h in history])
+        emit("replied", {"reply": reply})
         self.tts.speak(reply)
-        self.display.render(RenderState(person=(person.name if person else "Guest"), text=reply))
+        self.display.render(RenderState(person=name, text=reply))
+        emit("spoken", {})
         turn = Turn(person_id=person_id, ts=time.time(), said=said, replied=reply)
         self.memory.save_turn(turn)
         return turn

@@ -18,9 +18,15 @@ class OwwWakeWord:
     def _ensure(self) -> None:
         if self._detector is None:
             import openwakeword.model as oww_model  # noqa: PLC0415 -- lazy
+            import openwakeword.utils as oww_utils  # noqa: PLC0415 -- lazy
 
             om: Any = oww_model
-            self._detector = om.Model(wakeword_models=[self.model_name])
+            ut: Any = oww_utils
+            # openWakeWord ships no model files; without this the wakeword + feature
+            # models are absent and Model() raises NoSuchFile on every wake attempt.
+            # download_models is idempotent. Force onnx (no tflite runtime installed).
+            ut.download_models([self.model_name])
+            self._detector = om.Model(wakeword_models=[self.model_name], inference_framework="onnx")
         if self._source is None:
             self._source = MicSource(_SAMPLE_RATE)
 

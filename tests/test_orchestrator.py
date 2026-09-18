@@ -95,6 +95,33 @@ def test_prior_turn_recalled_in_next_prompt():
     assert llm.last_history == [("what's my day", "Standup at 9")]  # F6: history reaches the LLM
 
 
+def test_on_event_emits_each_stage_in_order():
+    # The console front-end observes the turn stage-by-stage via on_event.
+    m = FakeMemory()
+    m.upsert_person(Person(id="dad", name="Dad", embedding=[0.1], prefs={}))
+    orch, *_rest = _orch(m, "dad", said="what's my day", reply="Standup at 9")
+    events: list[tuple[str, dict[str, object]]] = []
+    orch.run_once(on_event=lambda stage, data: events.append((stage, data)))
+    assert [stage for stage, _ in events] == [
+        "wake",
+        "identified",
+        "transcribed",
+        "replied",
+        "spoken",
+    ]
+    by_stage = dict(events)
+    assert by_stage["identified"] == {"person_id": "dad", "name": "Dad"}
+    assert by_stage["transcribed"] == {"said": "what's my day"}
+    assert by_stage["replied"] == {"reply": "Standup at 9"}
+
+
+def test_on_event_reports_guest_for_unknown_speaker():
+    orch, *_rest = _orch(FakeMemory(), "guest", said="hi", reply="hello")
+    events: list[tuple[str, dict[str, object]]] = []
+    orch.run_once(on_event=lambda stage, data: events.append((stage, data)))
+    assert dict(events)["identified"] == {"person_id": GUEST, "name": "Guest"}
+
+
 def test_guest_does_not_read_or_write_enrolled_memory():
     m = FakeMemory()
     m.upsert_person(Person(id="dad", name="Dad", embedding=[0.1], prefs={}))
