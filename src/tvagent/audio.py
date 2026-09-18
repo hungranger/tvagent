@@ -13,6 +13,24 @@ _FRAME_MS = 30
 _MS_PER_SEC = 1000
 
 
+def resample_pcm(pcm: bytes, src_rate: int, dst_rate: int) -> bytes:
+    """Linearly resample mono int16 PCM. Used to capture the mic at the device's
+    native rate (avoids the CoreAudio same-device rate clash with playback) and
+    downsample to 16 kHz for VAD/AEC. Identity when the rates match."""
+    if not pcm or src_rate == dst_rate:
+        return pcm
+    import numpy as np  # noqa: PLC0415 -- lazy
+
+    npx: Any = np
+    a = npx.frombuffer(pcm, dtype=np.int16)
+    n_out = len(a) * dst_rate // src_rate
+    if n_out <= 0:
+        return b""
+    grid = npx.linspace(0, len(a) - 1, num=n_out)
+    out = npx.interp(grid, npx.arange(len(a)), a).astype(np.int16)
+    return bytes(out.tobytes())
+
+
 class PlaybackReference:
     """The AEC far-end reference: a FIFO of the PCM the assistant is playing.
     The playback path writes what it plays; the barge-in detector reads the same

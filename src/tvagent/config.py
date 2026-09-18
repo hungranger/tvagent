@@ -14,17 +14,24 @@ def build_orchestrator(
 
     o = overrides or {}
     memory = _get(o, "memory", _memory)
+    tts = _get(o, "tts", _tts)
+    barge_in = _get(o, "barge_in", _barge_in)
+    # Echo cancellation (TVAGENT_AEC): wrap TTS to tap the far-end and give the
+    # detector an AEC, both sharing one delay-primed reference so barge-in works
+    # on speakers. Only when we built the real adapters (not test overrides).
+    if os.environ.get("TVAGENT_AEC") and "tts" not in o and "barge_in" not in o and barge_in:
+        tts, barge_in = _with_aec(tts)  # pragma: no cover - real-adapter AEC wiring, live only
     orch = Orchestrator(
         wake=_get(o, "wake", _wake),
         capture=_get(o, "capture", _capture),
         speaker=_get(o, "speaker", lambda: _speaker(memory)),
         stt=_get(o, "stt", _stt),
         llm=_get(o, "llm", _llm),
-        tts=_get(o, "tts", _tts),
+        tts=tts,
         memory=memory,
         display=_get(o, "display", _display),
         wake_ack=os.environ.get("TVAGENT_WAKE_ACK", "Yes?"),  # set "" to disable
-        barge_in=_get(o, "barge_in", _barge_in),
+        barge_in=barge_in,
     )
     if warm:
         # Preload heavy local models off the turn path (cold-start ~40s → boot).
@@ -111,6 +118,23 @@ def _tts() -> ports.TTS:
     from tvagent.adapters.tts_piper import PiperTTS  # noqa: PLC0415 -- lazy
 
     return PiperTTS()
+
+
+def _with_aec(tts: ports.TTS) -> tuple[ports.TTS, ports.BargeInDetector]:
+    import os  # noqa: PLC0415 -- lazy
+
+    from tvagent.adapters.aec_gain import EchoGainCanceller  # noqa: PLC0415 -- lazy
+    from tvagent.adapters.bargein_vad import VadBargeIn  # noqa: PLC0415 -- lazy
+    from tvagent.adapters.tts_tap import TappedTTS  # noqa: PLC0415 -- lazy
+    from tvagent.audio import PlaybackReference  # noqa: PLC0415 -- lazy
+
+    ref = PlaybackReference()
+    # Prime with the round-trip delay so the far-end lags the near-end mic and the
+    # canceller lines them up (measured via scripts/aec_calibrate.py).
+    delay_ms = float(os.environ.get("TVAGENT_AEC_DELAY_MS", "105"))
+    ref.write(b"\x00\x00" * int(16000 * delay_ms / 1000))
+    detector = VadBargeIn(aec=EchoGainCanceller(), reference=ref)
+    return TappedTTS(tts, ref), detector
 
 
 def _barge_in() -> ports.BargeInDetector | None:
