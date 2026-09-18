@@ -1,0 +1,30 @@
+name: nightly-mutation
+
+on:
+  schedule:
+    - cron: "0 7 * * *"   # 07:00 UTC nightly
+  workflow_dispatch: {}     # manual trigger for testing (schedule: only fires on the default branch)
+
+jobs:
+  mutation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with:
+          python-version: "3.11"
+      {{PKG_INSTALL_STEP}}
+      - run: pytest --cov          # writes .coverage so mutate_only_covered_lines has data
+      - run: mutmut run             # gated below on the actual score, not on this step's exit code
+      - run: mutmut results
+      - run: mutmut export-cicd-stats
+      - name: Enforce mutation-score floor
+        run: python scripts/mutation_score.py --min {{MUTATION_FLOOR}}
+      - name: Upload mutmut results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        with:
+          name: mutmut-results
+          path: |
+            mutants/mutmut-cicd-stats.json
+            mutants/mutmut-stats.json

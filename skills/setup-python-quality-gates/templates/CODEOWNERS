@@ -1,0 +1,5 @@
+/pyproject.toml            @{{OWNER}}
+/.pre-commit-config.yaml   @{{OWNER}}
+/.github/**                @{{OWNER}}
+/scripts/gate_ratchet.py       @{{OWNER}}
+/scripts/suppression_diff.py   @{{OWNER}}

@@ -30,8 +30,6 @@ jobs:
         with:
           python-version: "3.11"
 
-      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a  # v4
-
       - name: Gate ratchet (fail on weakened gates)
         # Stdlib-only script -- no project deps needed, so it can run right
         # after setup-python. Compares this tree's gate settings against
@@ -39,8 +37,7 @@ jobs:
         # Anti-gaming: run origin/master's copy of the judge, NOT the PR's own —
         # otherwise a PR that neuters this script would pass itself. The
         # bootstrap fallback (PR copy) only fires when master has no
-        # gate_ratchet.py yet (the first-introduction PR, which is
-        # CODEOWNER-reviewed anyway).
+        # gate_ratchet.py yet (the first-introduction PR, reviewed anyway).
         if: github.event_name == 'pull_request'
         run: |
           git show origin/master:scripts/gate_ratchet.py > "$RUNNER_TEMP/gate_ratchet.py" 2>/dev/null \
@@ -59,10 +56,7 @@ jobs:
             && python "$RUNNER_TEMP/suppression_diff.py" \
             || { echo "note: origin/master has no suppression_diff.py yet (bootstrap) — running PR copy"; python scripts/suppression_diff.py; }
 
-      - name: Install project + test deps
-        # Matches nightly-mutation.yml: numpy is a top-level import in
-        # stt/speakerid modules but isn't a `dev` dependency.
-        run: pip install -e ".[dev]" numpy
+      {{PKG_INSTALL_STEP}}
 
       - name: Install pre-commit
         run: pip install pre-commit

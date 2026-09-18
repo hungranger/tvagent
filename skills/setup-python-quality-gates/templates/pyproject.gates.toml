@@ -1,0 +1,48 @@
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "PL", "RUF", "N", "C4", "C901", "PTH"]
+# PLR2004 = magic value used in comparison — this is the "no magic number/string" rule.
+
+[tool.ruff.lint.mccabe]
+max-complexity = {{MAX_COMPLEXITY}}
+
+[tool.ruff.lint.per-file-ignores]
+# Tests may use literals freely (assertions, fixtures) and don't need the magic-value rule.
+# ARG is only enforced on pre-push (ruff-arg local hook), not in the main
+# `select` above (that would run it pre-commit). Ignore it where unused args
+# are interface-mandated, not dead: test fakes/stubs satisfy Protocols.
+"tests/**" = ["PLR2004", "S101", "ARG001", "ARG002"]
+"scripts/**" = ["PLR2004"]
+
+[tool.pyright]
+include = ["src", "tests", "scripts"]
+pythonVersion = "3.11"
+typeCheckingMode = "{{PYRIGHT_MODE}}"
+# Optional runtime backends may not be installed in the dev/type-check
+# environment and may ship no type stubs. Do not fail on them.
+reportMissingImports = "none"
+reportMissingModuleSource = "none"
+reportMissingTypeStubs = "warning"
+
+[tool.vulture]
+min_confidence = {{VULTURE_MIN_CONFIDENCE}}
+
+[tool.mutmut]
+source_paths = {{SRC_DIRS}}
+pytest_add_cli_args_test_selection = ["tests/"]
+mutate_only_covered_lines = true
+
+[tool.coverage.run]
+source = {{SRC_DIRS}}
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+fail_under = {{COVERAGE_FLOOR}}
+exclude_also = [
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]
