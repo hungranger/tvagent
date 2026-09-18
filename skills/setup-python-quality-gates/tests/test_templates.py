@@ -9,7 +9,7 @@ def documented_tokens():
     return set(TOKEN_RE.findall(text))
 
 def test_every_used_token_is_documented():
-    used = set()
+    used: set[str] = set()
     for f in TPL.rglob("*"):
         if f.is_file() and f.name != "TOKENS.md" and f.suffix in {".toml", ".yaml", ".yml", ".json", ""}:
             used |= set(TOKEN_RE.findall(f.read_text(errors="ignore")))

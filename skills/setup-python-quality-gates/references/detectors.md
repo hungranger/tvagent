@@ -1,7 +1,10 @@
 # Detectors (Phase 0)
 
-`python -m gate_setup.detect <root>` (or `python -m gate_setup.detect .` from
-the target repo root) runs all four detectors and prints one JSON object.
+`python <skill-dir>/scripts/gate_setup/detect.py <root>` (or `python
+<skill-dir>/scripts/gate_setup/detect.py .` from the target repo root) runs
+all four detectors and prints one JSON object. Invoke it by path, not `python
+-m gate_setup.detect` — the module isn't importable from a target repo that
+hasn't added the skill's `scripts/` to its `sys.path`.
 Every detector has a graceful, explicit fallback — never guess silently; if a
 key comes back `null`/empty, say so and ask the user rather than assuming.
 
@@ -30,7 +33,7 @@ Treat every `null` as a stop-and-ask, not a default:
 ## Running it
 
 ```bash
-python -m gate_setup.detect .
+python <skill-dir>/scripts/gate_setup/detect.py .
 ```
 
 Output keys: `pkg_manager`, `audit_export`, `layout.{src_layout,

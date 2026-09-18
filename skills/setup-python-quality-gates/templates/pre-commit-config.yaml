@@ -101,7 +101,9 @@ repos:
 
       - id: vulture
         name: vulture (dead code)
-        entry: vulture src tests .vulture_allowlist.py --min-confidence 60
+        # {{SRC_DIRS}} is rendered here as space-separated paths (not the
+        # TOML-list form used in pyproject.gates.toml) -- see SKILL.md Phase 4.
+        entry: vulture {{SRC_DIRS}} tests .vulture_allowlist.py --min-confidence {{VULTURE_MIN_CONFIDENCE}}
         language: python
         additional_dependencies: ["vulture==2.16"]
         pass_filenames: false

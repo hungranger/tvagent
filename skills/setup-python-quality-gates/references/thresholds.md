@@ -42,6 +42,10 @@ For each gate:
 - **pyright on legacy is the sharp edge**: there is no native "baseline
   file" for pyright the way there sort of is for coverage. Start at the
   strictness mode the code already passes with zero errors; document the
-  step-by-step graduation path to `strict` in the installed docs; the
-  ratchet enforces the *mode* never regressing (see `check_pyright` in
-  `gate_ratchet.py`).
+  step-by-step graduation path to `strict` in the installed docs. The
+  ratchet does **not** enforce "never regress from wherever it started" —
+  `check_pyright` in `gate_ratchet.py` hardcodes a requirement that
+  `typeCheckingMode == "strict"` (see `references/anti-gaming.md`). A repo
+  baselined below `strict` therefore cannot enable L3's ratchet on the
+  pyright gate until it graduates to `strict` — see `references/tiers.md`
+  and SKILL.md Phase 4 for the L1+L2-only path in the meantime.

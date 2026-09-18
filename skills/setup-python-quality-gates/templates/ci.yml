@@ -30,8 +30,6 @@ jobs:
         with:
           python-version: "3.11"
 
-      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a  # v4
-
       - name: Gate ratchet (fail on weakened gates)
         # Stdlib-only script -- no project deps needed, so it can run right
         # after setup-python. Compares this tree's gate settings against
@@ -46,8 +44,7 @@ jobs:
         if: github.event_name == 'pull_request'
         run: python scripts/suppression_diff.py
 
-      - name: Install project + test deps
-        run: {{PKG_INSTALL_STEP}}
+      {{PKG_INSTALL_STEP}}
 
       - name: Install pre-commit
         run: pip install pre-commit

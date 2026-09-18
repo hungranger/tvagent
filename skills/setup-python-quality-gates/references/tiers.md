@@ -43,6 +43,15 @@ Requires: repo admin rights + a public or paid-plan repo (branch rulesets
 need one of those — see `detectors.md`'s git-host detector and
 `anti-gaming.md`).
 
+**Pyright-strict constraint:** `gate_ratchet.py`'s `check_pyright` hardcodes
+`typeCheckingMode == "strict"` as the pass condition — it does not ratchet
+from an arbitrary starting mode, it requires `strict` outright (see
+`anti-gaming.md`). A legacy repo whose Phase 2 baseline is below `strict`
+(`basic`/`standard`) must install L1 + L2 only and defer enabling L3's
+ratchet on the pyright gate until the repo graduates to `strict` — enabling
+it earlier makes every PR red on the pyright check regardless of code
+quality.
+
 Adds:
 - `scripts/gate_ratchet.py` — fails CI on any weakened or deleted threshold
   relative to `origin/master`
