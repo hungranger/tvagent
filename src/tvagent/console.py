@@ -40,6 +40,7 @@ def _status(orch: Orchestrator) -> dict[str, Any]:
         "margin": getattr(speaker, "margin", None),
         "voice": getattr(tts, "voice", None),
         "wake": getattr(orch.wake, "model_name", None),
+        "barge": orch.barge_in is not None,
         "people": [p.name for p in orch.memory.list_people()],
     }
 

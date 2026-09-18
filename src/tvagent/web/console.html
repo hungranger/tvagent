@@ -148,6 +148,7 @@ function renderEvent(m){
   else if(s === "transcribed")log('<span class="stage">said</span> "'+m.said+'"');
   else if(s === "replied")    log('<span class="stage">reply</span> "'+m.reply+'"');
   else if(s === "spoken")     log('<span class="stage">spoken</span> ✓');
+  else if(s === "barge_armed")log('<span class="stage">barge</span> 👂 listening for interruption');
   else if(s === "interrupted")log('<span class="stage">interrupted</span> ⏹ user spoke over the reply');
   else if(s === "ignored")    log('<span class="stage">ignored</span> no speech detected');
   else if(s === "enroll_start")log('<span class="stage">enroll</span> recording '+m.seconds+'s for '+m.name+'…');
@@ -164,6 +165,7 @@ function applyStatus(m){
   if(m.threshold != null){ $("th").value = m.threshold; $("thV").textContent = (+m.threshold).toFixed(2); }
   if(m.margin != null){ $("mg").value = m.margin; $("mgV").textContent = (+m.margin).toFixed(2); }
   if(m.voice) $("voice").value = m.voice;
+  if(m.barge != null) $("status").textContent = "connected · barge-in " + (m.barge ? "ON" : "off");
   if(m.people) $("people").textContent = m.people.length ? "Enrolled: " + m.people.join(", ") : "No one enrolled yet";
 }
 
