@@ -127,6 +127,7 @@ function renderEvent(m){
   else if(s === "transcribed")log('<span class="stage">said</span> "'+m.said+'"');
   else if(s === "replied")    log('<span class="stage">reply</span> "'+m.reply+'"');
   else if(s === "spoken")     log('<span class="stage">spoken</span> ✓');
+  else if(s === "ignored")    log('<span class="stage">ignored</span> no speech detected');
   else if(s === "enroll_start")log('<span class="stage">enroll</span> recording '+m.seconds+'s for '+m.name+'…');
   else if(s === "enroll_done") log('<span class="stage">enroll</span> ✓ '+m.name+' registered');
   else if(s === "error")       log('<span class="err">error</span> '+m.message, "err");

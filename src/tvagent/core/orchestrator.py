@@ -17,6 +17,13 @@ OnEvent = Callable[[str, dict[str, object]], None]
 _SENTENCE_END = re.compile(r"[.!?][\"')\]]?\s")
 
 
+def has_speech(text: str) -> bool:
+    """True only if the transcript carries actual words — guards against replying
+    to silence or whisper's noise artifacts (empty, whitespace, "...", "- .").
+    """
+    return any(c.isalnum() for c in text)
+
+
 def iter_sentences(chunks: Iterable[str]) -> Iterator[str]:
     """Reassemble streamed text chunks and yield complete sentences as soon as
     each is finished, then the trailing remainder — so TTS can start speaking the
@@ -82,6 +89,10 @@ class Orchestrator:
         name = person.name if person else "Guest"
         emit("identified", {"person_id": person_id, "name": name})
         emit("transcribed", {"said": said})
+        if not has_speech(said):
+            # Wake word then silence/noise -> don't invent a reply or persist it.
+            emit("ignored", {"said": said})
+            return Turn(person_id=person_id, ts=time.time(), said=said, replied="")
         system, user = self._build(person, facts, said)
         # Stream the reply: speak each sentence as the LLM finishes it, so the
         # first words play while the rest is still generating (time-to-first-audio).

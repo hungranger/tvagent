@@ -11,7 +11,29 @@ from tests.fakes import (
     FakeWakeWord,
 )
 from tvagent.core.models import GUEST, AudioClip, Fact, Person
-from tvagent.core.orchestrator import Orchestrator, iter_sentences
+from tvagent.core.orchestrator import Orchestrator, has_speech, iter_sentences
+
+
+def test_has_speech_rejects_empty_and_nonsense():
+    assert has_speech("what's my day") is True
+    assert has_speech("yes") is True
+    assert has_speech("") is False
+    assert has_speech("   ") is False
+    assert has_speech("...") is False  # whisper noise artifact
+    assert has_speech(" - . ") is False
+
+
+def test_blank_transcript_is_ignored_no_llm_no_speech():
+    m = FakeMemory()
+    m.upsert_person(Person(id="dad", name="Dad", embedding=[0.1], prefs={}))
+    orch, llm, tts, _disp, *_rest = _orch(m, "dad", said="   ", reply="SHOULD NOT SPEAK")
+    events: list[str] = []
+    turn = orch.run_once(on_event=lambda s, _d: events.append(s))
+    assert tts.spoken == []  # nothing spoken
+    assert llm.last_user is None  # LLM never called
+    assert turn.replied == ""  # no reply
+    assert m.recent_turns("dad", 10) == []  # noise not persisted
+    assert "ignored" in events and "replied" not in events and "spoken" not in events
 
 
 def test_iter_sentences_splits_on_boundaries_and_flushes_remainder():
