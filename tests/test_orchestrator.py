@@ -140,6 +140,17 @@ def test_reply_streamed_to_tts_sentence_by_sentence():
     assert disp.last is not None and disp.last.text == "Hi there. All good."
 
 
+def test_display_text_streams_in_step_with_the_voice():
+    # The TV caption should grow sentence-by-sentence in sync with the spoken
+    # audio, not appear all at once at the end.
+    m = FakeMemory()
+    m.upsert_person(Person(id="dad", name="Dad", embedding=[0.1], prefs={}))
+    orch, _llm, _tts, disp, *_rest = _orch(m, "dad", said="hi", reply="Hi there. All good.")
+    orch.run_once()
+    assert [r.text for r in disp.renders] == ["Hi there.", "Hi there. All good."]
+    assert all(r.person == "Dad" for r in disp.renders)
+
+
 def test_identify_and_transcribe_run_concurrently():
     # Both consume the same clip independently; running them in parallel shaves a
     # stage off the turn. Proven with a 2-party barrier: if run_once called them

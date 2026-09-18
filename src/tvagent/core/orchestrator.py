@@ -90,9 +90,12 @@ class Orchestrator:
         for sentence in iter_sentences(self.llm.stream(system, user, pairs)):
             self.tts.speak(sentence)
             parts.append(sentence)
+            # Grow the on-screen caption in step with the spoken audio.
+            self.display.render(RenderState(person=name, text=" ".join(parts)))
         reply = " ".join(parts)
+        if not parts:  # nothing streamed -> still clear/refresh the screen once
+            self.display.render(RenderState(person=name, text=reply))
         emit("replied", {"reply": reply})
-        self.display.render(RenderState(person=name, text=reply))
         emit("spoken", {})
         turn = Turn(person_id=person_id, ts=time.time(), said=said, replied=reply)
         self.memory.save_turn(turn)

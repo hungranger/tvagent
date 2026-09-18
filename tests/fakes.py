@@ -71,9 +71,11 @@ class FakeTTS:
 class FakeDisplay:
     def __init__(self) -> None:
         self.last: RenderState | None = None
+        self.renders: list[RenderState] = []
 
     def render(self, state: RenderState) -> None:
         self.last = state
+        self.renders.append(state)
 
 
 class FakeMemory:
