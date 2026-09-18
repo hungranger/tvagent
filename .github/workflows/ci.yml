@@ -36,15 +36,28 @@ jobs:
         # Stdlib-only script -- no project deps needed, so it can run right
         # after setup-python. Compares this tree's gate settings against
         # origin/master and fails if any were weakened. See scripts/gate_ratchet.py.
+        # Anti-gaming: run origin/master's copy of the judge, NOT the PR's own —
+        # otherwise a PR that neuters this script would pass itself. The
+        # bootstrap fallback (PR copy) only fires when master has no
+        # gate_ratchet.py yet (the first-introduction PR, which is
+        # CODEOWNER-reviewed anyway).
         if: github.event_name == 'pull_request'
-        run: python scripts/gate_ratchet.py
+        run: |
+          git show origin/master:scripts/gate_ratchet.py > "$RUNNER_TEMP/gate_ratchet.py" 2>/dev/null \
+            && python "$RUNNER_TEMP/gate_ratchet.py" \
+            || { echo "note: origin/master has no gate_ratchet.py yet (bootstrap) — running PR copy"; python scripts/gate_ratchet.py; }
 
       - name: Suppression diff (visibility only, non-blocking)
         # Prints GitHub annotations for newly-added suppressions in this PR's
         # diff vs origin/master so a human reviewer sees them inline. Always
         # exits 0 -- see scripts/suppression_diff.py.
+        # Anti-gaming: run origin/master's copy (same rationale as above);
+        # bootstrap fallback only when master lacks the script.
         if: github.event_name == 'pull_request'
-        run: python scripts/suppression_diff.py
+        run: |
+          git show origin/master:scripts/suppression_diff.py > "$RUNNER_TEMP/suppression_diff.py" 2>/dev/null \
+            && python "$RUNNER_TEMP/suppression_diff.py" \
+            || { echo "note: origin/master has no suppression_diff.py yet (bootstrap) — running PR copy"; python scripts/suppression_diff.py; }
 
       - name: Install project + test deps
         # Matches nightly-mutation.yml: numpy is a top-level import in
