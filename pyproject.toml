@@ -151,6 +151,7 @@ modules = [
     "tvagent.adapters.wakeword_oww",
     "tvagent.adapters.audio_vad",
     "tvagent.adapters.tts_piper",
+    "tvagent.adapters.tts_kokoro",
     "tvagent.adapters.display_web",
 ]
 

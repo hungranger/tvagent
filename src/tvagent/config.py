@@ -98,6 +98,12 @@ def _llm() -> ports.LLM:
 
 
 def _tts() -> ports.TTS:
+    import os  # noqa: PLC0415 -- lazy
+
+    if os.environ.get("TVAGENT_TTS") == "kokoro":  # more natural, opt-in
+        from tvagent.adapters.tts_kokoro import KokoroTTS  # noqa: PLC0415 -- lazy
+
+        return KokoroTTS()
     from tvagent.adapters.tts_piper import PiperTTS  # noqa: PLC0415 -- lazy
 
     return PiperTTS()
