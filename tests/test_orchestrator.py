@@ -11,7 +11,7 @@ from tests.fakes import (
     FakeWakeWord,
 )
 from tvagent.core.models import GUEST, AudioClip, Fact, Person
-from tvagent.core.orchestrator import Orchestrator, has_speech, stream_reply
+from tvagent.core.orchestrator import Orchestrator, has_speech, iter_sentences, paced_reveal
 
 
 def test_has_speech_rejects_empty_and_nonsense():
@@ -36,23 +36,29 @@ def test_blank_transcript_is_ignored_no_llm_no_speech():
     assert "ignored" in events and "replied" not in events and "spoken" not in events
 
 
-def test_stream_reply_captions_word_by_word_and_speaks_whole_sentences():
-    steps = list(stream_reply(["Hi", " there.", " All", " good."]))
-    captions = [p for k, p in steps if k == "caption"]
-    speaks = [p for k, p in steps if k == "speak"]
-    # caption grows token-by-token; voice gets complete sentences
-    assert captions == ["Hi", "Hi there.", "Hi there. All", "Hi there. All good."]
-    assert speaks == ["Hi there.", "All good."]
+def test_iter_sentences_splits_on_boundaries_and_flushes_remainder():
+    chunks = ["Hello wor", "ld. How ", "are you? ", "Fine"]
+    assert list(iter_sentences(chunks)) == ["Hello world.", "How are you?", "Fine"]
 
 
-def test_stream_reply_skips_empty_chunks_and_flushes_remainder():
-    steps = list(stream_reply(["", "just one line", ""]))
-    assert [p for k, p in steps if k == "caption"] == ["just one line"]
-    assert [p for k, p in steps if k == "speak"] == ["just one line"]
+def test_iter_sentences_empty_stream_yields_nothing():
+    assert list(iter_sentences([])) == []
 
 
-def test_stream_reply_empty_stream_yields_nothing():
-    assert list(stream_reply([])) == []
+def test_paced_reveal_appends_words_over_duration():
+    shown: list[str] = []
+    slept: list[float] = []
+    out = paced_reveal("Hi there.", "All good now", 3.0, shown.append, slept.append)
+    # words appended to the prefix, one render each
+    assert shown == ["Hi there. All", "Hi there. All good", "Hi there. All good now"]
+    assert out == "Hi there. All good now"
+    assert slept == [1.0, 1.0, 1.0]  # 3s spread evenly across 3 words -> paced to audio
+
+
+def test_paced_reveal_empty_sentence_is_noop():
+    shown: list[str] = []
+    assert paced_reveal("prefix", "   ", 1.0, shown.append) == "prefix"
+    assert shown == []
 
 
 def _orch(

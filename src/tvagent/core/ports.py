@@ -28,6 +28,8 @@ class LLM(Protocol):
 
 class TTS(Protocol):
     def speak(self, text: str) -> None: ...
+    def synth(self, text: str) -> tuple[bytes, float]: ...  # (audio, duration seconds)
+    def play(self, pcm: bytes) -> None: ...
 
 
 class MemoryStore(Protocol):

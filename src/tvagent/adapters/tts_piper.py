@@ -68,3 +68,17 @@ class PiperTTS:
         if not text.strip():
             return
         self._play(self._synth(text))
+
+    def synth(self, text: str) -> tuple[bytes, float]:
+        # Return the WAV audio plus its playback duration (seconds), so callers can
+        # pace an on-screen caption to the spoken length.
+        if not text.strip():
+            return b"", 0.0
+        pcm = self._synth(text)
+        with wave.open(io.BytesIO(pcm)) as wf:
+            duration = wf.getnframes() / float(wf.getframerate())
+        return pcm, duration
+
+    def play(self, pcm: bytes) -> None:
+        if pcm:
+            self._play(pcm)

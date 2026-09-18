@@ -65,9 +65,17 @@ class FakeLLM:
 class FakeTTS:
     def __init__(self) -> None:
         self.spoken: list[str] = []
+        self.played: list[bytes] = []
 
     def speak(self, text: str) -> None:
         self.spoken.append(text)
+
+    def synth(self, text: str) -> tuple[bytes, float]:
+        self.spoken.append(text)  # record what would be voiced
+        return text.encode(), 0.0  # zero duration -> paced_reveal won't wait in tests
+
+    def play(self, pcm: bytes) -> None:
+        self.played.append(pcm)
 
 
 class FakeDisplay:

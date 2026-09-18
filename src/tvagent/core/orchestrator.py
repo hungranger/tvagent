@@ -1,4 +1,5 @@
 import re
+import threading
 import time
 from collections.abc import Callable, Iterable, Iterator
 from concurrent.futures import ThreadPoolExecutor
@@ -24,27 +25,44 @@ def has_speech(text: str) -> bool:
     return any(c.isalnum() for c in text)
 
 
-def stream_reply(chunks: Iterable[str]) -> Iterator[tuple[str, str]]:
-    """Drive both surfaces from one pass over the LLM token stream:
-
-    - ("caption", full_text_so_far) on every chunk — the on-screen text types out
-      word-by-word as tokens arrive.
-    - ("speak", sentence) when a sentence completes (plus the trailing remainder)
-      — TTS gets whole sentences, since Piper synthesizes a sentence at a time.
+def iter_sentences(chunks: Iterable[str]) -> Iterator[str]:
+    """Reassemble streamed LLM chunks and yield complete sentences as soon as each
+    finishes (then the trailing remainder), so TTS can synthesize sentence-by-
+    sentence while the model is still generating the rest.
     """
-    full = ""
-    pending = ""
+    buf = ""
     for chunk in chunks:
-        if not chunk:
-            continue
-        full += chunk
-        pending += chunk
-        yield ("caption", full.strip())
-        while (m := _SENTENCE_END.search(pending)) is not None:
-            yield ("speak", pending[: m.end()].strip())
-            pending = pending[m.end() :]
-    if pending.strip():
-        yield ("speak", pending.strip())
+        buf += chunk
+        while (m := _SENTENCE_END.search(buf)) is not None:
+            yield buf[: m.end()].strip()
+            buf = buf[m.end() :]
+    if buf.strip():
+        yield buf.strip()
+
+
+def paced_reveal(
+    prefix: str,
+    sentence: str,
+    duration: float,
+    render: Callable[[str], None],
+    sleep: Callable[[float], None] = time.sleep,
+) -> str:
+    """Reveal a sentence's words one at a time, spread evenly across `duration`
+    (its spoken length), appending to `prefix` (already-shown text). Keeps the
+    caption in step with the audio instead of racing ahead. Returns the full text
+    shown so far. `sleep` is injectable so tests don't wait in real time.
+    """
+    words = sentence.split()
+    if not words:
+        return prefix
+    per = duration / len(words)
+    shown = prefix
+    for word in words:
+        shown = f"{shown} {word}".strip()
+        render(shown)
+        if per > 0:
+            sleep(per)
+    return shown
 
 
 class Orchestrator:
@@ -102,20 +120,25 @@ class Orchestrator:
             emit("ignored", {"said": said})
             return Turn(person_id=person_id, ts=time.time(), said=said, replied="")
         system, user = self._build(person, facts, said)
-        # Stream the reply: speak each sentence as the LLM finishes it, so the
-        # first words play while the rest is still generating (time-to-first-audio).
+        # Stream the reply sentence-by-sentence; for each, synthesize its audio,
+        # start playing it, and reveal its words paced across the audio's duration
+        # so the caption keeps step with the voice instead of racing ahead.
         pairs = [(h.said, h.replied) for h in history]
         reply = ""
         rendered = False
-        for kind, payload in stream_reply(self.llm.stream(system, user, pairs)):
-            if kind == "caption":  # word-by-word text, in step with the audio
-                reply = payload
-                self.display.render(RenderState(person=name, text=payload))
-                rendered = True
-            else:  # a completed sentence -> speak it
-                self.tts.speak(payload)
+
+        def show(text: str) -> None:
+            self.display.render(RenderState(person=name, text=text))
+
+        for sentence in iter_sentences(self.llm.stream(system, user, pairs)):
+            pcm, duration = self.tts.synth(sentence)
+            player = threading.Thread(target=self.tts.play, args=(pcm,), daemon=True)
+            player.start()
+            reply = paced_reveal(reply, sentence, duration, show)
+            rendered = True
+            player.join()
         if not rendered:  # nothing streamed -> refresh the screen once
-            self.display.render(RenderState(person=name, text=reply))
+            show(reply)
         emit("replied", {"reply": reply})
         emit("spoken", {})
         turn = Turn(person_id=person_id, ts=time.time(), said=said, replied=reply)
