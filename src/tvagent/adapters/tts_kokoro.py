@@ -1,8 +1,15 @@
 import io
+import os
 import wave
 from collections.abc import Callable
 from typing import Any
 
+from tvagent.audio import resample_pcm
+
+# Play at the device-native rate so a 16k barge-in mic can share the built-in
+# device without a CoreAudio err=-50 (Kokoro synthesizes at 24k). See
+# scripts/aec_calibrate.py. Tunable per machine.
+_PLAY_RATE = int(os.environ.get("TVAGENT_PLAY_RATE", "48000"))
 _VOICE = "af_heart"  # Kokoro's flagship voice
 _RELEASE = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0"
 _MODEL_URL = f"{_RELEASE}/kokoro-v1.0.onnx"
@@ -76,9 +83,11 @@ class KokoroTTS:
         sd: Any = sounddevice
         npx: Any = np
         with wave.open(io.BytesIO(pcm)) as wf:
-            data = npx.frombuffer(wf.readframes(wf.getnframes()), dtype=np.int16)
-            sd.play(data, wf.getframerate())
-            sd.wait()
+            raw = wf.readframes(wf.getnframes())
+            rate = wf.getframerate()
+        data = npx.frombuffer(resample_pcm(raw, rate, _PLAY_RATE), dtype=np.int16)
+        sd.play(data, _PLAY_RATE)  # device-native rate -> no duplex -50 with the barge mic
+        sd.wait()
 
     def _default_stop(self) -> None:
         import sounddevice  # noqa: PLC0415 -- lazy

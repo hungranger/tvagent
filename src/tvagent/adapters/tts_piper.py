@@ -1,8 +1,14 @@
 import io
+import os
 import wave
 from collections.abc import Callable
 from typing import Any
 
+from tvagent.audio import resample_pcm
+
+# Play at the device-native rate so a 16k barge-in mic can share the built-in
+# device without a CoreAudio err=-50. See scripts/aec_calibrate.py. Tunable.
+_PLAY_RATE = int(os.environ.get("TVAGENT_PLAY_RATE", "48000"))
 _VOICE = "en_US-amy-medium"
 
 
@@ -62,9 +68,11 @@ class PiperTTS:
         sd: Any = sounddevice
         npx: Any = np
         with wave.open(io.BytesIO(pcm)) as wf:
-            data = npx.frombuffer(wf.readframes(wf.getnframes()), dtype=np.int16)
-            sd.play(data, wf.getframerate())
-            sd.wait()
+            raw = wf.readframes(wf.getnframes())
+            rate = wf.getframerate()
+        data = npx.frombuffer(resample_pcm(raw, rate, _PLAY_RATE), dtype=np.int16)
+        sd.play(data, _PLAY_RATE)  # device-native rate -> no duplex -50 with the barge mic
+        sd.wait()
 
     def _default_stop(self) -> None:
         import sounddevice  # noqa: PLC0415 -- lazy
