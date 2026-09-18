@@ -1,3 +1,5 @@
+import threading
+
 from tests.fakes import (
     FakeAudioCapture,
     FakeDisplay,
@@ -113,6 +115,41 @@ def test_on_event_emits_each_stage_in_order():
     assert by_stage["identified"] == {"person_id": "dad", "name": "Dad"}
     assert by_stage["transcribed"] == {"said": "what's my day"}
     assert by_stage["replied"] == {"reply": "Standup at 9"}
+
+
+def test_identify_and_transcribe_run_concurrently():
+    # Both consume the same clip independently; running them in parallel shaves a
+    # stage off the turn. Proven with a 2-party barrier: if run_once called them
+    # sequentially, the first would block on the barrier and time out (BrokenBarrier),
+    # failing the test; only concurrent execution lets both arrive and proceed.
+    barrier = threading.Barrier(2, timeout=3)
+    clip = AudioClip(samples=b"x", sample_rate=16000)
+
+    class _BarrierSpeaker:
+        def identify(self, clip: AudioClip) -> str:
+            barrier.wait()
+            return "guest"
+
+        def enroll(self, name: str, clips: list[AudioClip]) -> Person:
+            return Person(id=name.lower(), name=name, embedding=[0.0], prefs={})
+
+    class _BarrierSTT:
+        def transcribe(self, clip: AudioClip) -> str:
+            barrier.wait()
+            return "hello"
+
+    orch = Orchestrator(
+        FakeWakeWord(),
+        FakeAudioCapture(clip),
+        _BarrierSpeaker(),
+        _BarrierSTT(),
+        FakeLLM("hi"),
+        FakeTTS(),
+        FakeMemory(),
+        FakeDisplay(),
+    )
+    turn = orch.run_once()
+    assert turn.said == "hello" and turn.replied == "hi"
 
 
 def test_on_event_reports_guest_for_unknown_speaker():

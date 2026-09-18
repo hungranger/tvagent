@@ -29,7 +29,7 @@ def test_capture_stops_after_trailing_silence():
 def test_default_sample_rate_and_silence_limit():
     cap = VadCapture(_source=_ScriptedSource([]))
     assert cap.sample_rate == 16000
-    assert cap.silence_limit == 15
+    assert cap.silence_limit == 10  # ~300ms trailing silence ends capture (was 15/450ms)
 
 
 def test_leading_silence_before_any_speech_does_not_count():

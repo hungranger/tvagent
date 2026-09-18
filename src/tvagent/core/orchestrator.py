@@ -1,5 +1,6 @@
 import time
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 
 from tvagent.core import ports
 from tvagent.core.models import GUEST, Fact, Person, RenderState, Turn
@@ -44,8 +45,13 @@ class Orchestrator:
         self.wake.wait()
         emit("wake", {})
         clip = self.capture.capture()
-        person_id = self.speaker.identify(clip)
-        said = self.stt.transcribe(clip)
+        # Speaker-ID and transcription both consume the same clip independently;
+        # run them concurrently (both release the GIL in native code) to shave a
+        # stage off the turn.
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            id_future = pool.submit(self.speaker.identify, clip)
+            said = self.stt.transcribe(clip)
+            person_id = id_future.result()
         person = None if person_id == GUEST else self.memory.get_person(person_id)
         if person is None:
             person_id = GUEST
