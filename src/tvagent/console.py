@@ -23,7 +23,7 @@ from collections.abc import Callable
 from typing import Any
 from urllib.parse import urlparse
 
-from tvagent.core.models import RenderState
+from tvagent.core.models import AudioClip, RenderState
 from tvagent.core.orchestrator import Orchestrator
 
 _PORT = 8765
@@ -60,6 +60,26 @@ def handle_command(orch: Orchestrator, msg: dict[str, Any]) -> dict[str, Any]:
         tts: Any = orch.tts
         tts.set_voice(str(msg["name"]))
     return _status(orch)
+
+
+def run_enroll(
+    orch: Orchestrator,
+    name: str,
+    record: Callable[[int], AudioClip],
+    emit: Callable[[str, dict[str, object]], None],
+) -> None:
+    """Record a voice sample and register it, surfacing any mic error to the UI.
+
+    Blocking (records for _ENROLL_SECONDS); the server runs it off its event loop
+    on a worker thread. Errors are emitted, never swallowed.
+    """
+    try:
+        emit("enroll_start", {"name": name, "seconds": _ENROLL_SECONDS})
+        clip = record(_ENROLL_SECONDS)
+        person = orch.speaker.enroll(name, [clip])
+        emit("enroll_done", {"name": person.name})
+    except Exception as exc:
+        emit("error", {"message": f"enroll failed: {exc}"})
 
 
 def origin_allowed(origin: str | None) -> bool:
@@ -164,13 +184,22 @@ class ConsoleServer:  # pragma: no cover - websocket/thread/mic IO glue, no CI c
             self._emit("error", {"message": str(exc)})
 
     def _enroll(self, name: str) -> None:
-        assert self.orch is not None
-        from tvagent.adapters.audio_vad import record_seconds  # noqa: PLC0415 -- lazy mic
+        # The listen loop holds the mic while waiting for a wake word, so enrolling
+        # then would fight it for the input device. Require listening off.
+        if self._listen.listening:
+            self._emit("error", {"message": "Stop listening first, then enroll (mic is in use)."})
+            return
 
-        self._emit("enroll_start", {"name": name, "seconds": _ENROLL_SECONDS})
-        clip = record_seconds(_ENROLL_SECONDS)
-        person = self.orch.speaker.enroll(name, [clip])
-        self._emit("enroll_done", {"name": person.name})
+        # Record + embed on a worker thread so the 30s capture doesn't freeze the
+        # websocket event loop (which would swallow the enroll_start feedback).
+        def worker() -> None:
+            from tvagent.adapters.audio_vad import record_seconds  # noqa: PLC0415 -- lazy mic
+
+            assert self.orch is not None
+            run_enroll(self.orch, name, record_seconds, self._emit)
+            self._broadcast(self._status_msg())
+
+        threading.Thread(target=worker, daemon=True).start()
 
     # --- server -------------------------------------------------------------
     def _serve(self) -> None:

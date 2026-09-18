@@ -10,7 +10,7 @@ from tests.fakes import (
     FakeTTS,
     FakeWakeWord,
 )
-from tvagent.console import ListenLoop, handle_command, origin_allowed
+from tvagent.console import ListenLoop, handle_command, origin_allowed, run_enroll
 from tvagent.core.models import AudioClip, Person
 from tvagent.core.orchestrator import Orchestrator
 
@@ -88,6 +88,29 @@ def test_unknown_command_returns_status_unchanged() -> None:
     # An unrecognized command must not raise and must still report current state.
     status = handle_command(_orch(), {"cmd": "bogus"})
     assert status["threshold"] == 0.25
+
+
+def test_run_enroll_emits_start_then_done_and_registers() -> None:
+    orch = _orch()
+    events: list[tuple[str, dict[str, object]]] = []
+    clip = AudioClip(samples=b"z", sample_rate=16000)
+    run_enroll(orch, "Dad", lambda _s: clip, lambda stage, data: events.append((stage, data)))
+    assert [s for s, _ in events] == ["enroll_start", "enroll_done"]
+    assert events[0][1]["name"] == "Dad"
+    assert events[1][1]["name"] == "Dad"
+
+
+def test_run_enroll_surfaces_failure_instead_of_swallowing() -> None:
+    # A mic/permission error must reach the UI as an error event, not vanish.
+    orch = _orch()
+    events: list[tuple[str, dict[str, object]]] = []
+
+    def boom(_s: int) -> AudioClip:
+        raise RuntimeError("no input device")
+
+    run_enroll(orch, "Dad", boom, lambda stage, data: events.append((stage, data)))
+    assert events[-1][0] == "error"
+    assert "no input device" in str(events[-1][1]["message"])
 
 
 def test_origin_allowed_accepts_local_rejects_cross_site() -> None:
