@@ -11,7 +11,7 @@ from tests.fakes import (
     FakeWakeWord,
 )
 from tvagent.core.models import GUEST, AudioClip, Fact, Person
-from tvagent.core.orchestrator import Orchestrator, has_speech, iter_sentences
+from tvagent.core.orchestrator import Orchestrator, has_speech, stream_reply
 
 
 def test_has_speech_rejects_empty_and_nonsense():
@@ -36,17 +36,23 @@ def test_blank_transcript_is_ignored_no_llm_no_speech():
     assert "ignored" in events and "replied" not in events and "spoken" not in events
 
 
-def test_iter_sentences_splits_on_boundaries_and_flushes_remainder():
-    chunks = ["Hello wor", "ld. How ", "are you? ", "Fine"]
-    assert list(iter_sentences(chunks)) == ["Hello world.", "How are you?", "Fine"]
+def test_stream_reply_captions_word_by_word_and_speaks_whole_sentences():
+    steps = list(stream_reply(["Hi", " there.", " All", " good."]))
+    captions = [p for k, p in steps if k == "caption"]
+    speaks = [p for k, p in steps if k == "speak"]
+    # caption grows token-by-token; voice gets complete sentences
+    assert captions == ["Hi", "Hi there.", "Hi there. All", "Hi there. All good."]
+    assert speaks == ["Hi there.", "All good."]
 
 
-def test_iter_sentences_no_terminal_punctuation_yields_whole():
-    assert list(iter_sentences(["just ", "one line"])) == ["just one line"]
+def test_stream_reply_skips_empty_chunks_and_flushes_remainder():
+    steps = list(stream_reply(["", "just one line", ""]))
+    assert [p for k, p in steps if k == "caption"] == ["just one line"]
+    assert [p for k, p in steps if k == "speak"] == ["just one line"]
 
 
-def test_iter_sentences_empty_stream_yields_nothing():
-    assert list(iter_sentences([])) == []
+def test_stream_reply_empty_stream_yields_nothing():
+    assert list(stream_reply([])) == []
 
 
 def _orch(
@@ -169,7 +175,13 @@ def test_display_text_streams_in_step_with_the_voice():
     m.upsert_person(Person(id="dad", name="Dad", embedding=[0.1], prefs={}))
     orch, _llm, _tts, disp, *_rest = _orch(m, "dad", said="hi", reply="Hi there. All good.")
     orch.run_once()
-    assert [r.text for r in disp.renders] == ["Hi there.", "Hi there. All good."]
+    # caption types out word-by-word (one render per token), ending at the full reply
+    assert [r.text for r in disp.renders] == [
+        "Hi",
+        "Hi there.",
+        "Hi there. All",
+        "Hi there. All good.",
+    ]
     assert all(r.person == "Dad" for r in disp.renders)
 
 

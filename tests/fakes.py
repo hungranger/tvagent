@@ -57,7 +57,9 @@ class FakeLLM:
 
     def stream(self, system: str, user: str, history: list[tuple[str, str]]) -> Iterator[str]:
         self.last_system, self.last_user, self.last_history = system, user, history
-        yield self._reply
+        # Emit token-by-token like a real streaming LLM, not one lump.
+        for i, word in enumerate(self._reply.split()):
+            yield word if i == 0 else " " + word
 
 
 class FakeTTS:

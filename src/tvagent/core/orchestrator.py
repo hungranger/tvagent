@@ -24,19 +24,27 @@ def has_speech(text: str) -> bool:
     return any(c.isalnum() for c in text)
 
 
-def iter_sentences(chunks: Iterable[str]) -> Iterator[str]:
-    """Reassemble streamed text chunks and yield complete sentences as soon as
-    each is finished, then the trailing remainder — so TTS can start speaking the
-    first sentence while the LLM is still generating the rest.
+def stream_reply(chunks: Iterable[str]) -> Iterator[tuple[str, str]]:
+    """Drive both surfaces from one pass over the LLM token stream:
+
+    - ("caption", full_text_so_far) on every chunk — the on-screen text types out
+      word-by-word as tokens arrive.
+    - ("speak", sentence) when a sentence completes (plus the trailing remainder)
+      — TTS gets whole sentences, since Piper synthesizes a sentence at a time.
     """
-    buf = ""
+    full = ""
+    pending = ""
     for chunk in chunks:
-        buf += chunk
-        while (m := _SENTENCE_END.search(buf)) is not None:
-            yield buf[: m.end()].strip()
-            buf = buf[m.end() :]
-    if buf.strip():
-        yield buf.strip()
+        if not chunk:
+            continue
+        full += chunk
+        pending += chunk
+        yield ("caption", full.strip())
+        while (m := _SENTENCE_END.search(pending)) is not None:
+            yield ("speak", pending[: m.end()].strip())
+            pending = pending[m.end() :]
+    if pending.strip():
+        yield ("speak", pending.strip())
 
 
 class Orchestrator:
@@ -97,14 +105,16 @@ class Orchestrator:
         # Stream the reply: speak each sentence as the LLM finishes it, so the
         # first words play while the rest is still generating (time-to-first-audio).
         pairs = [(h.said, h.replied) for h in history]
-        parts: list[str] = []
-        for sentence in iter_sentences(self.llm.stream(system, user, pairs)):
-            self.tts.speak(sentence)
-            parts.append(sentence)
-            # Grow the on-screen caption in step with the spoken audio.
-            self.display.render(RenderState(person=name, text=" ".join(parts)))
-        reply = " ".join(parts)
-        if not parts:  # nothing streamed -> still clear/refresh the screen once
+        reply = ""
+        rendered = False
+        for kind, payload in stream_reply(self.llm.stream(system, user, pairs)):
+            if kind == "caption":  # word-by-word text, in step with the audio
+                reply = payload
+                self.display.render(RenderState(person=name, text=payload))
+                rendered = True
+            else:  # a completed sentence -> speak it
+                self.tts.speak(payload)
+        if not rendered:  # nothing streamed -> refresh the screen once
             self.display.render(RenderState(person=name, text=reply))
         emit("replied", {"reply": reply})
         emit("spoken", {})
