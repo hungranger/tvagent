@@ -4,7 +4,7 @@ from tvagent.audio import MicSource
 
 _SAMPLE_RATE = 16000
 _WAKE_THRESHOLD = 0.5
-_WAKE_MODEL = "hey_jarvis"
+_WAKE_MODEL = "alexa"
 
 
 class OwwWakeWord:
