@@ -29,7 +29,9 @@ class VadBargeIn:
         self._source: Any = _source or MicSource(sample_rate)
         self._aec = aec
         self._reference = reference
-        self._vad: Any = _vad or self._default_vad()
+        # Built lazily on first cleaned frame (real AEC path only) so construction
+        # never imports webrtcvad — tests inject `_vad` or don't use AEC at all.
+        self._vad = _vad
         self._speaking = threading.Event()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -67,6 +69,8 @@ class VadBargeIn:
         # the cleaned frame; otherwise trust the mic source's raw VAD.
         if self._aec is None or self._reference is None:
             return is_speech
+        if self._vad is None:  # pragma: no cover - real webrtcvad path, live only
+            self._vad = self._default_vad()
         far = self._reference.read(len(frame))
         return bool(self._vad(self._aec.process(frame, far)))
 
