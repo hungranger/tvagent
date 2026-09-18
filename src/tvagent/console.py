@@ -19,13 +19,16 @@ ws://localhost:8765 the TV kiosk already uses. It talks JSON both ways:
 import asyncio
 import json
 import threading
+from collections.abc import Callable
 from typing import Any
+from urllib.parse import urlparse
 
 from tvagent.core.models import RenderState
 from tvagent.core.orchestrator import Orchestrator
 
 _PORT = 8765
 _ENROLL_SECONDS = 30
+_LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1")
 
 
 def _status(orch: Orchestrator) -> dict[str, Any]:
@@ -59,12 +62,55 @@ def handle_command(orch: Orchestrator, msg: dict[str, Any]) -> dict[str, Any]:
     return _status(orch)
 
 
+def origin_allowed(origin: str | None) -> bool:
+    """Reject cross-site WebSocket hijacking: only same-machine callers.
+
+    Residual: file:// pages send Origin "null", which must be allowed for the
+    kiosk/console-opened-as-a-file case -- so any LOCAL file page can also
+    connect. Closing that would need a token, out of scope for the no-auth POC.
+    """
+    if origin is None or origin == "null":
+        return True
+    return urlparse(origin).hostname in _LOCAL_HOSTS
+
+
+class ListenLoop:
+    """Background listen thread with idempotent on/off toggling and never more
+    than one live worker thread.
+
+    Stop takes effect after the in-flight turn returns: a real turn blocks in
+    wake.wait() on the mic until a wake word fires, so a stop mid-wait is
+    honored only once the current wake resolves (openWakeWord has no cancel).
+    """
+
+    def __init__(self, run_turn: Callable[[], None]) -> None:
+        self._run_turn = run_turn
+        self._on = False
+        self._thread: threading.Thread | None = None
+
+    @property
+    def listening(self) -> bool:
+        return self._on
+
+    def set(self, on: bool) -> None:
+        if on == self._on:
+            return  # idempotent: no double-start, no spurious stop
+        self._on = on
+        if on and (self._thread is None or not self._thread.is_alive()):
+            self._thread = threading.Thread(target=self._loop, daemon=True)
+            self._thread.start()
+
+    def _loop(self) -> None:
+        while self._on:
+            self._run_turn()
+
+
 class ConsoleServer:  # pragma: no cover - websocket/thread/mic IO glue, no CI coverage
     def __init__(self, port: int = _PORT) -> None:
         self.port = port
         self.orch: Orchestrator | None = None
         self._clients: set[Any] = set()
-        self._listening = False
+        self._listen = ListenLoop(self._run_turn)
         self._loop = asyncio.new_event_loop()
         threading.Thread(target=self._serve, daemon=True).start()
 
@@ -93,7 +139,7 @@ class ConsoleServer:  # pragma: no cover - websocket/thread/mic IO glue, no CI c
     def _status_msg(self) -> dict[str, Any]:
         if self.orch is None:
             return {"type": "status", "listening": False, "people": []}
-        return {**_status(self.orch), "listening": self._listening}
+        return {**_status(self.orch), "listening": self._listen.listening}
 
     # --- inbound ------------------------------------------------------------
     def _on_message(self, raw: str) -> None:
@@ -102,27 +148,20 @@ class ConsoleServer:  # pragma: no cover - websocket/thread/mic IO glue, no CI c
         msg: dict[str, Any] = json.loads(raw)
         cmd = msg.get("cmd")
         if cmd == "listen":
-            self._set_listening(bool(msg.get("on")))
+            self._listen.set(bool(msg.get("on")))
         elif cmd == "enroll":
             self._enroll(str(msg["name"]))
         else:
             handle_command(self.orch, msg)
         self._broadcast(self._status_msg())
 
-    def _set_listening(self, on: bool) -> None:
-        if on and not self._listening:
-            self._listening = True
-            threading.Thread(target=self._listen_loop, daemon=True).start()
-        else:
-            self._listening = False  # loop checks the flag between turns
-
-    def _listen_loop(self) -> None:
-        assert self.orch is not None
-        while self._listening:
-            try:
-                self.orch.run_once(on_event=self._emit)
-            except Exception as exc:
-                self._emit("error", {"message": str(exc)})
+    def _run_turn(self) -> None:
+        if self.orch is None:
+            return
+        try:
+            self.orch.run_once(on_event=self._emit)
+        except Exception as exc:
+            self._emit("error", {"message": str(exc)})
 
     def _enroll(self, name: str) -> None:
         assert self.orch is not None
@@ -141,6 +180,11 @@ class ConsoleServer:  # pragma: no cover - websocket/thread/mic IO glue, no CI c
         asyncio.set_event_loop(self._loop)
 
         async def handler(ws: Any) -> None:
+            req = getattr(ws, "request", None)
+            origin = req.headers.get("Origin") if req is not None else None
+            if not origin_allowed(origin):
+                await ws.close(code=1008, reason="origin not allowed")
+                return
             self._clients.add(ws)
             await ws.send(json.dumps(self._status_msg()))
             try:

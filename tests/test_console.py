@@ -1,3 +1,6 @@
+import threading
+import time
+
 from tests.fakes import (
     FakeAudioCapture,
     FakeDisplay,
@@ -7,7 +10,7 @@ from tests.fakes import (
     FakeTTS,
     FakeWakeWord,
 )
-from tvagent.console import handle_command
+from tvagent.console import ListenLoop, handle_command, origin_allowed
 from tvagent.core.models import AudioClip, Person
 from tvagent.core.orchestrator import Orchestrator
 
@@ -85,3 +88,42 @@ def test_unknown_command_returns_status_unchanged() -> None:
     # An unrecognized command must not raise and must still report current state.
     status = handle_command(_orch(), {"cmd": "bogus"})
     assert status["threshold"] == 0.25
+
+
+def test_origin_allowed_accepts_local_rejects_cross_site() -> None:
+    assert origin_allowed(None) is True  # non-browser client
+    assert origin_allowed("null") is True  # file:// kiosk/console
+    assert origin_allowed("http://localhost:8080") is True
+    assert origin_allowed("http://127.0.0.1:5500") is True
+    assert origin_allowed("https://evil.example.com") is False  # CSWSH attempt
+    assert origin_allowed("http://localhost.attacker.com") is False  # suffix trick
+
+
+def test_listenloop_toggles_idempotently_and_stays_single_threaded() -> None:
+    seen: list[threading.Thread] = []
+
+    def run_turn() -> None:
+        seen.append(threading.current_thread())
+        time.sleep(0.005)
+
+    ll = ListenLoop(run_turn)
+    assert ll.listening is False
+    ll.set(True)
+    time.sleep(0.03)  # let a few turns run
+    t1 = ll._thread  # pyright: ignore[reportPrivateUsage]
+    ll.set(True)  # idempotent -> must NOT spawn a second thread
+    assert ll._thread is t1  # pyright: ignore[reportPrivateUsage]
+    assert ll.listening is True
+    ll.set(False)
+    assert t1 is not None
+    t1.join(1.0)
+    assert not t1.is_alive()  # stop actually ends the loop (turns are instant here)
+    assert seen and all(t is t1 for t in seen)  # only ever one worker thread
+
+    # restart after the thread has died -> a fresh worker
+    ll.set(True)
+    time.sleep(0.03)
+    t2 = ll._thread  # pyright: ignore[reportPrivateUsage]
+    assert t2 is not None and t2 is not t1
+    ll.set(False)
+    t2.join(1.0)
