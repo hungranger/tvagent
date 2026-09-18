@@ -11,6 +11,8 @@ _HISTORY_LIMIT = 5
 _DEFAULT_TONE = "friendly"
 _TONE_PREF_KEY = "tone"
 _IDLE_ACK_SECONDS = 45.0  # re-acknowledge the wake word after this much idle time
+_PLAY_JOIN_TIMEOUT = 30.0  # cap the wait on a playback thread so barge-in can't deadlock a turn
+_BARGE_POLL_SECONDS = 0.05  # how often to check for barge-in while a sentence's audio plays
 
 # Per-stage observer for front-ends (e.g. the console): (stage, payload).
 OnEvent = Callable[[str, dict[str, object]], None]
@@ -41,17 +43,20 @@ def iter_sentences(chunks: Iterable[str]) -> Iterator[str]:
         yield buf.strip()
 
 
-def paced_reveal(
+def paced_reveal(  # noqa: PLR0913 -- cohesive render helper: text, timing, and two injectable hooks
     prefix: str,
     sentence: str,
     duration: float,
     render: Callable[[str], None],
     sleep: Callable[[float], None] = time.sleep,
+    should_stop: Callable[[], bool] | None = None,
 ) -> str:
     """Reveal a sentence's words one at a time, spread evenly across `duration`
     (its spoken length), appending to `prefix` (already-shown text). Keeps the
     caption in step with the audio instead of racing ahead. Returns the full text
-    shown so far. `sleep` is injectable so tests don't wait in real time.
+    shown so far. `sleep` is injectable so tests don't wait in real time. If
+    `should_stop` is given and returns True, the reveal halts mid-sentence
+    (barge-in) and returns the partial text shown so far.
     """
     words = sentence.split()
     if not words:
@@ -59,6 +64,8 @@ def paced_reveal(
     per = duration / len(words)
     shown = prefix
     for word in words:
+        if should_stop is not None and should_stop():
+            return shown
         shown = f"{shown} {word}".strip()
         render(shown)
         if per > 0:
@@ -79,6 +86,7 @@ class Orchestrator:
         display: ports.Display,
         wake_ack: str | None = None,
         idle_ack_seconds: float = _IDLE_ACK_SECONDS,
+        barge_in: ports.BargeInDetector | None = None,
     ) -> None:
         self.wake, self.capture, self.speaker = wake, capture, speaker
         self.stt, self.llm, self.tts = stt, llm, tts
@@ -88,6 +96,10 @@ class Orchestrator:
         self.wake_ack = wake_ack
         self.idle_ack_seconds = idle_ack_seconds
         self._last_turn_ts: float | None = None
+        # Optional barge-in: lets the user talk over the reply to interrupt it.
+        self.barge_in = barge_in
+        # After an interrupt, the user's follow-up is captured without re-waking.
+        self._skip_wake = False
 
     def _build(self, person: Person | None, facts: list[Fact], said: str) -> tuple[str, str]:
         who = person.name if person else "an unknown guest"
@@ -102,7 +114,10 @@ class Orchestrator:
 
     def run_once(self, on_event: OnEvent | None = None) -> Turn:
         emit: OnEvent = on_event or (lambda _stage, _data: None)
-        self.wake.wait()
+        if self._skip_wake:  # follow-up right after a barge-in: skip the wake word once
+            self._skip_wake = False
+        else:
+            self.wake.wait()
         emit("wake", {})
         now = time.time()
         if self.wake_ack and (
@@ -135,27 +150,76 @@ class Orchestrator:
             emit("ignored", {"said": said})
             return Turn(person_id=person_id, ts=time.time(), said=said, replied="")
         system, user = self._build(person, facts, said)
-        # Stream the reply sentence-by-sentence; for each, synthesize its audio,
-        # start playing it, and reveal its words paced across the audio's duration
-        # so the caption keeps step with the voice instead of racing ahead.
         pairs = [(h.said, h.replied) for h in history]
-        reply = ""
-        rendered = False
+        reply, interrupted = self._stream_reply(system, user, pairs, name)
+        turn = Turn(person_id=person_id, ts=time.time(), said=said, replied=reply)
+        self.memory.save_turn(turn)
+        if interrupted:
+            self._skip_wake = True  # hear the user's follow-up without re-waking
+            emit("interrupted", {"reply": reply})
+        else:
+            emit("replied", {"reply": reply})
+            emit("spoken", {})
+        return turn
+
+    def _stream_reply(
+        self, system: str, user: str, pairs: list[tuple[str, str]], name: str
+    ) -> tuple[str, bool]:
+        """Stream the reply sentence-by-sentence: synthesize each, play it, and
+        reveal its words paced across the audio's duration so the caption keeps
+        step with the voice. If a barge-in detector is set, poll it during
+        playback and abort (stop the audio, drop the rest) the moment the user
+        talks over the reply. Returns (text shown, whether interrupted).
+        ponytail: barge-in polls per word; tighten by chunking paced_reveal's sleep.
+        """
 
         def show(text: str) -> None:
             self.display.render(RenderState(person=name, text=text))
 
-        for sentence in iter_sentences(self.llm.stream(system, user, pairs)):
-            pcm, duration = self.tts.synth(sentence)
-            player = threading.Thread(target=self.tts.play, args=(pcm,), daemon=True)
-            player.start()
-            reply = paced_reveal(reply, sentence, duration, show)
-            rendered = True
-            player.join()
+        barge = threading.Event()
+
+        def watch() -> bool:
+            if barge.is_set():
+                return True
+            if self.barge_in is not None and self.barge_in.speaking():
+                barge.set()
+                self.tts.stop()
+                return True
+            return False
+
+        should_stop = watch if self.barge_in is not None else None
+        reply, rendered = "", False
+        if self.barge_in is not None:
+            self.barge_in.arm()
+        try:
+            for sentence in iter_sentences(self.llm.stream(system, user, pairs)):
+                pcm, duration = self.tts.synth(sentence)
+                player = threading.Thread(target=self.tts.play, args=(pcm,), daemon=True)
+                player.start()
+                reply = paced_reveal(reply, sentence, duration, show, should_stop=should_stop)
+                rendered = True
+                self._await_playback(player, should_stop)
+                if barge.is_set():
+                    break
+        finally:
+            if self.barge_in is not None:
+                self.barge_in.disarm()
         if not rendered:  # nothing streamed -> refresh the screen once
             show(reply)
-        emit("replied", {"reply": reply})
-        emit("spoken", {})
-        turn = Turn(person_id=person_id, ts=time.time(), said=said, replied=reply)
-        self.memory.save_turn(turn)
-        return turn
+        return reply, barge.is_set()
+
+    def _await_playback(
+        self, player: threading.Thread, should_stop: Callable[[], bool] | None
+    ) -> None:
+        """Wait for a sentence's audio to finish. With barge-in armed, keep
+        polling while it plays so the user can interrupt during the audio's
+        tail, not only between words. Capped so a stuck player can't hang a turn.
+        """
+        if should_stop is None:
+            player.join(timeout=_PLAY_JOIN_TIMEOUT)
+            return
+        deadline = time.monotonic() + _PLAY_JOIN_TIMEOUT
+        while player.is_alive():
+            player.join(_BARGE_POLL_SECONDS)
+            if should_stop() or time.monotonic() > deadline:
+                return

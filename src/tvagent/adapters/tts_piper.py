@@ -12,11 +12,13 @@ class PiperTTS:
         voice: str = _VOICE,
         _synth: Callable[[str], bytes] | None = None,
         _play: Callable[[bytes], None] | None = None,
+        _stop: Callable[[], None] | None = None,
     ) -> None:
         self.voice = voice
         self._using_default_synth = _synth is None
         self._synth = _synth or self._default_synth
         self._play = _play or self._default_play
+        self._stop = _stop or self._default_stop
         self._model: Any = None
 
     def _load_model(self) -> Any:
@@ -64,6 +66,12 @@ class PiperTTS:
             sd.play(data, wf.getframerate())
             sd.wait()
 
+    def _default_stop(self) -> None:
+        import sounddevice  # noqa: PLC0415 -- lazy
+
+        sd: Any = sounddevice
+        sd.stop()
+
     def speak(self, text: str) -> None:
         if not text.strip():
             return
@@ -82,3 +90,6 @@ class PiperTTS:
     def play(self, pcm: bytes) -> None:
         if pcm:
             self._play(pcm)
+
+    def stop(self) -> None:
+        self._stop()

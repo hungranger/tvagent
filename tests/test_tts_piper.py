@@ -55,6 +55,14 @@ def test_empty_text_does_not_play():
     assert played == []
 
 
+def test_stop_delegates_to_injected_stopper() -> None:
+    # Barge-in: stop() must abort in-flight playback.
+    calls: list[int] = []
+    tts = PiperTTS(_synth=lambda _t: b"x", _stop=lambda: calls.append(1))
+    tts.stop()
+    assert calls == [1]
+
+
 def test_default_voice_is_stored():
     assert PiperTTS().voice == "en_US-amy-medium"
 
