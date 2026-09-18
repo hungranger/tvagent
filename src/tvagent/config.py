@@ -60,12 +60,33 @@ def _speaker(memory: ports.MemoryStore) -> ports.SpeakerID:
 
 
 def _stt() -> ports.STT:
+    import os  # noqa: PLC0415 -- lazy
+
+    if os.environ.get("TVAGENT_STT") == "mlx":  # Metal-accelerated, mac-only opt-in
+        from tvagent.adapters.stt_mlx import MlxWhisperSTT  # noqa: PLC0415 -- lazy
+
+        return MlxWhisperSTT()
     from tvagent.adapters.stt_whisper import WhisperSTT  # noqa: PLC0415 -- lazy
 
     return WhisperSTT()
 
 
 def _llm() -> ports.LLM:
+    import os  # noqa: PLC0415 -- lazy
+
+    backend = os.environ.get("TVAGENT_LLM", "claude")
+    if backend == "local":  # Ollama or any OpenAI-compatible server on localhost
+        from tvagent.adapters.llm_openai import OpenAILLM  # noqa: PLC0415 -- lazy
+
+        return OpenAILLM(model=os.environ.get("TVAGENT_LLM_MODEL", "llama3.2"))
+    if backend == "cerebras":
+        from tvagent.adapters.llm_openai import OpenAILLM  # noqa: PLC0415 -- lazy
+
+        return OpenAILLM(
+            base_url="https://api.cerebras.ai/v1",
+            api_key=os.environ.get("CEREBRAS_API_KEY"),
+            model=os.environ.get("TVAGENT_LLM_MODEL", "llama-3.3-70b"),
+        )
     from tvagent.adapters.llm_claude import ClaudeLLM  # noqa: PLC0415 -- lazy
 
     return ClaudeLLM()

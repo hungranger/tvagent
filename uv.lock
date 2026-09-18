@@ -1692,6 +1692,23 @@ wheels = [
 ]
 
 [[package]]
+name = "openai"
+version = "3.15.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anyio" },
+    { name = "httpx2" },
+    { name = "jiter" },
+    { name = "pydantic" },
+    { name = "sniffio" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/82/6b/f086332d9fdefcc3853f2457209fcf221985d01d32b5021ab8096be7d506/openai-3.15.0.tar.gz", hash = "sha256:47bc15f8b9db62ba9ff7fa32164c72f4fd6333b22d890251292aac1c6bfe998f", size = 1664554 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fb/92/fc65194e6e92cf0202a2e5fff75e2fef62e7dbb7a6cf2b48c1239dfedb50/openai-3.15.0-py3-none-any.whl", hash = "sha256:95d6b2caf3823c7e0fc08911317b7f31b9f9ccf93b414e7a5c8d5b226af115f6", size = 2018693 },
+]
+
+[[package]]
 name = "openwakeword"
 version = "0.6.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2833,6 +2850,7 @@ run = [
     { name = "faster-whisper" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "numpy", version = "2.5.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "openai" },
     { name = "openwakeword" },
     { name = "piper-tts" },
     { name = "sounddevice" },
@@ -2847,6 +2865,7 @@ requires-dist = [
     { name = "faster-whisper", marker = "extra == 'run'" },
     { name = "import-linter", marker = "extra == 'dev'" },
     { name = "numpy", marker = "extra == 'run'" },
+    { name = "openai", marker = "extra == 'run'" },
     { name = "openwakeword", marker = "extra == 'run'" },
     { name = "pip-audit", marker = "extra == 'dev'" },
     { name = "piper-tts", marker = "extra == 'run'" },

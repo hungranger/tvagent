@@ -9,7 +9,7 @@ dev = ["pytest", "ruff==0.15.7", "pyright", "pytest-cov", "pre-commit", "vulture
 # webrtcvad-wheels (maintained fork, prebuilt wheels): drop-in `import webrtcvad`,
 # but without the original's `import pkg_resources` — which breaks on setuptools>=81
 # (removed) and would otherwise force a pin to CVE-affected setuptools<81.
-run = ["anthropic", "faster-whisper", "piper-tts", "speechbrain", "openwakeword", "webrtcvad-wheels", "websockets", "sounddevice", "numpy"]
+run = ["anthropic", "faster-whisper", "piper-tts", "speechbrain", "openwakeword", "webrtcvad-wheels", "websockets", "sounddevice", "numpy", "openai"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
@@ -143,7 +143,9 @@ type = "independence"
 modules = [
     "tvagent.adapters.memory_json",
     "tvagent.adapters.llm_claude",
+    "tvagent.adapters.llm_openai",
     "tvagent.adapters.stt_whisper",
+    "tvagent.adapters.stt_mlx",
     "tvagent.adapters.speakerid_ecapa",
     "tvagent.adapters.wakeword_oww",
     "tvagent.adapters.audio_vad",
