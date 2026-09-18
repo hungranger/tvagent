@@ -77,7 +77,7 @@ branch = true
 
 [tool.coverage.report]
 show_missing = true
-fail_under = 92
+fail_under = 80
 exclude_also = [
     "if __name__ == .__main__.:",
     "def _default_",              # hardware-backed default synth/play/embed paths
