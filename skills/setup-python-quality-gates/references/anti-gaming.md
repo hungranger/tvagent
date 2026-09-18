@@ -79,3 +79,55 @@ someone with admin turns on the ruleset.
 `require_extra_approval_for_unattributed_changes` (a GitHub-added field),
 which supports the same actor/judge separation goal — keep it rather than
 stripping it as boilerplate.
+
+## Amending the judge & who reviews
+
+Who is allowed to weaken a gate, and who signs off, depends on how many
+humans the repo has. There are two supported models.
+
+### Model 1 — TEAM (≥ 2 humans)
+
+The classic actor/judge split. The gate-defining files (`pyproject.toml`,
+`.pre-commit-config.yaml`, `.github/`, the `scripts/` judges, `CODEOWNERS`,
+etc.) are owned via `CODEOWNERS`, and the branch ruleset requires **≥ 1
+approval including a code owner**. A change that weakens a gate is a normal
+PR that a *second human identity* must approve. The actor cannot self-merge
+a weakening because the review must come from someone else.
+
+### Model 2 — SOLO DEV (one human + an AI agent)
+
+A solo developer has no second identity to approve their PRs — and GitHub
+**blocks self-approval**, so "required approvals ≥ 1" would deadlock every
+PR. The realistic setting is therefore **required approvals = 0**. The
+threat model also differs: the danger isn't a careless teammate, it's the
+**agent autonomously weakening a gate** mid-task. So the human checkpoint
+moves to **edit time**, not review time, via two mechanisms:
+
+1. **A deterministic PreToolUse guard hook** (`scripts/guard_protected_paths.py`,
+   wired through `.claude/settings.json`). It emits `permissionDecision:
+   "ask"` — routing to the human, no LLM in the loop — when the agent tries
+   to (a) write a protected gate/config file, or (b) run a gate-bypassing
+   command: `gh pr merge`, `git push` to master/main, `git commit
+   --no-verify`, or `gh api` against rulesets / branch protection. At 0
+   required approvals, the merge itself is the checkpoint the human must
+   approve.
+2. **CI running `origin/master`'s copy of the judge.** `ci.yml` runs
+   `gate_ratchet.py` / `suppression_diff.py` fetched from `origin/master`
+   (via `git show`), not the PR's own copy, so a PR that neuters its own
+   judge is still graded by the untampered master version. See `ci.yml`.
+
+### Honest limits (both models)
+
+- **The Bash matching is heuristic**, not a shell parser. It is substring +
+  write-verb / command regex; it can be evaded (obfuscated commands, indirect
+  invocation). Treat it as a speed bump, not a wall.
+- **The hook runs actor-side** — it is *prevention*, running in the agent's
+  own session, which the agent's environment could in principle disable. It
+  is not the enforcement boundary.
+- **The server-side ruleset stays load-bearing.** The real boundary is the
+  branch ruleset: a required `quality-gate` status check, no direct pushes to
+  master, no force-push / branch deletion, and no bypass actors. This holds
+  even if the hook is bypassed or absent.
+- **The final layer is not handing the agent repo-admin credentials.** If the
+  agent can edit the ruleset itself (admin token / `gh api .../rulesets`),
+  every layer above collapses. Keep admin out of the agent's hands.

@@ -131,6 +131,17 @@ For each target file (`pyproject.toml` gate blocks, `.pre-commit-config.yaml`,
    (it's `nightly-mutation.yml`'s only consumer).
 5. **L3 only:**
    - Write `CODEOWNERS` (owner token filled from the user).
+   - **Edit-time guard hook:** copy `templates/scripts/guard_protected_paths.py`
+     verbatim to the repo's `scripts/` (stdlib-only, repo-agnostic — no token
+     substitution; a repo extends the protected set via
+     `.claude/protected-paths.json`), and merge `templates/claude-settings.json`'s
+     `PreToolUse` block into the repo's `.claude/settings.json`
+     non-destructively (create the file if absent; preserve any existing
+     keys). This is the deterministic human checkpoint at edit time — it
+     `ask`s before the agent writes a protected gate file or runs a
+     gate-bypassing command (`gh pr merge`, push to master/main,
+     `--no-verify`, ruleset/protection `gh api`). It activates on the next
+     Claude Code session load. See `references/anti-gaming.md`.
    - **Pyright-strict gate:** the ratchet's `check_pyright` (see
      `references/anti-gaming.md`) hardcodes a requirement that
      `typeCheckingMode == "strict"` — it has no concept of "ratchet toward
@@ -147,6 +158,16 @@ For each target file (`pyproject.toml` gate blocks, `.pre-commit-config.yaml`,
      user that CODEOWNERS/required-review are **advisory** until branch
      protection is enabled, naming the specific reason (no admin /
      private+free plan / non-GitHub host).
+   - **Required-approvals variant — ask which applies** (see
+     `references/anti-gaming.md`, "Amending the judge & who reviews"):
+     - **Team (≥ 2 humans):** require **≥ 1 approval including a code owner**
+       so a *second identity* signs off on any gate change. This is
+       `ruleset.json`'s default.
+     - **Solo dev (one human + agent):** GitHub blocks self-approval, so
+       set **required approvals = 0** (otherwise every PR deadlocks). The
+       human gate is instead the edit-time guard hook above plus CI running
+       `origin/master`'s ratchet — keep the required `quality-gate` check,
+       no-direct-push, and no-bypass rules load-bearing.
 
 Re-run safety: this phase is itself ratchet-like — a config already present
 and equal/higher than the proposed template value is left alone, never
