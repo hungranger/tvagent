@@ -17,7 +17,8 @@ markers = ["component: real-backend tests needing models/audio fixtures"]
 line-length = 100
 target-version = "py311"
 # Machine-generated (vulture --make-whitelist) allowlist stub, not real code.
-extend-exclude = [".vulture_allowlist.py"]
+# skills/ ships its own deliberately-messy fixtures for a Claude skill; not part of the app.
+extend-exclude = [".vulture_allowlist.py", "skills"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "PL", "RUF", "N", "C4", "C901", "PTH"]
@@ -41,7 +42,8 @@ include = ["src", "tests", "scripts"]
 # .vulture_allowlist.py is a vulture whitelist stub (bare names, not real
 # code) at the repo root — already outside `include`, excluded explicitly too
 # so this stays true regardless of how `include` evolves.
-exclude = [".vulture_allowlist.py"]
+# skills/ is also outside `include`; excluded explicitly for the same reason.
+exclude = [".vulture_allowlist.py", "skills"]
 pythonVersion = "3.11"
 typeCheckingMode = "strict"
 # Optional runtime backends (anthropic, faster_whisper, piper, speechbrain, torch,
@@ -74,6 +76,7 @@ mutate_only_covered_lines = true
 [tool.coverage.run]
 source = ["src/tvagent"]
 branch = true
+omit = ["skills/*"]
 
 [tool.coverage.report]
 show_missing = true
