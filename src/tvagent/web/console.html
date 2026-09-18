@@ -91,12 +91,25 @@
 const $ = id => document.getElementById(id);
 let ws, listening = false;
 
-function log(html, cls){
-  const el = $("log");
+function el(tag, cls, text){
+  const n = document.createElement(tag);
+  if(cls) n.className = cls;
+  if(text != null) n.textContent = text;
+  return n;
+}
+function stage(text){ return el("span", "stage", text); }
+
+// Build each log line from DOM nodes: only the fixed <span> markup is created
+// as elements; every string part becomes a text node, so untrusted event
+// fields cannot inject HTML -- nothing is rendered as raw markup (XSS guard).
+function log(cls, ...parts){
+  const box = $("log");
   const line = document.createElement("div");
   if(cls) line.className = cls;
-  line.innerHTML = new Date().toLocaleTimeString() + "  " + html;
-  el.appendChild(line); el.scrollTop = el.scrollHeight;
+  line.appendChild(document.createTextNode(new Date().toLocaleTimeString() + "  "));
+  for(const p of parts)
+    line.appendChild(typeof p === "string" ? document.createTextNode(p) : p);
+  box.appendChild(line); box.scrollTop = box.scrollHeight;
 }
 
 function connect(){
@@ -122,14 +135,14 @@ function handle(m){
 
 function renderEvent(m){
   const s = m.stage;
-  if(s === "wake")            log('<span class="stage">wake</span> — heard wake word');
-  else if(s === "identified") log('<span class="stage">who</span> → <span class="val">'+m.name+'</span>');
-  else if(s === "transcribed")log('<span class="stage">said</span> "'+m.said+'"');
-  else if(s === "replied")    log('<span class="stage">reply</span> "'+m.reply+'"');
-  else if(s === "spoken")     log('<span class="stage">spoken</span> ✓');
-  else if(s === "enroll_start")log('<span class="stage">enroll</span> recording '+m.seconds+'s for '+m.name+'…');
-  else if(s === "enroll_done") log('<span class="stage">enroll</span> ✓ '+m.name+' registered');
-  else if(s === "error")       log('<span class="err">error</span> '+m.message, "err");
+  if(s === "wake")            log(null, stage("wake"), " — heard wake word");
+  else if(s === "identified") log(null, stage("who"), " → ", el("span", "val", m.name));
+  else if(s === "transcribed")log(null, stage("said"), ' "'+m.said+'"');
+  else if(s === "replied")    log(null, stage("reply"), ' "'+m.reply+'"');
+  else if(s === "spoken")     log(null, stage("spoken"), " ✓");
+  else if(s === "enroll_start")log(null, stage("enroll"), " recording "+m.seconds+"s for "+m.name+"…");
+  else if(s === "enroll_done") log(null, stage("enroll"), " ✓ "+m.name+" registered");
+  else if(s === "error")       log("err", el("span", "err", "error"), " "+m.message);
 }
 
 function applyStatus(m){
