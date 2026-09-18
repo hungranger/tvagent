@@ -8,6 +8,12 @@ class _Msg:
         self.message = type("M", (), {"content": content})()
 
 
+def _delta_chunk(text: str | None) -> Any:
+    return type(
+        "Chunk", (), {"choices": [type("Ch", (), {"delta": type("D", (), {"content": text})()})()]}
+    )()
+
+
 class _StubClient:
     def __init__(self, content: str = "hello there") -> None:
         self.seen: dict[str, Any] = {}
@@ -17,6 +23,9 @@ class _StubClient:
         class _Completions:
             def create(self, **kwargs: Any) -> Any:
                 outer.seen = kwargs
+                if kwargs.get("stream"):
+                    # two deltas + a null delta (real servers send empty final chunks)
+                    return iter([_delta_chunk("hello "), _delta_chunk("there"), _delta_chunk(None)])
                 return type("R", (), {"choices": [_Msg(outer._content)]})()
 
         self.chat = type("C", (), {"completions": _Completions()})()
@@ -46,3 +55,10 @@ def test_respond_sends_max_tokens() -> None:
     stub = _StubClient()
     OpenAILLM(client=stub, max_tokens=64).respond("sys", "hi", [])
     assert stub.seen["max_tokens"] == 64
+
+
+def test_stream_yields_text_deltas_and_skips_empty() -> None:
+    stub = _StubClient()
+    out = list(OpenAILLM(client=stub).stream("sys", "hi", []))
+    assert out == ["hello ", "there"]  # null final delta dropped
+    assert stub.seen["stream"] is True

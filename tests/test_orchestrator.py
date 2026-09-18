@@ -11,7 +11,20 @@ from tests.fakes import (
     FakeWakeWord,
 )
 from tvagent.core.models import GUEST, AudioClip, Fact, Person
-from tvagent.core.orchestrator import Orchestrator
+from tvagent.core.orchestrator import Orchestrator, iter_sentences
+
+
+def test_iter_sentences_splits_on_boundaries_and_flushes_remainder():
+    chunks = ["Hello wor", "ld. How ", "are you? ", "Fine"]
+    assert list(iter_sentences(chunks)) == ["Hello world.", "How are you?", "Fine"]
+
+
+def test_iter_sentences_no_terminal_punctuation_yields_whole():
+    assert list(iter_sentences(["just ", "one line"])) == ["just one line"]
+
+
+def test_iter_sentences_empty_stream_yields_nothing():
+    assert list(iter_sentences([])) == []
 
 
 def _orch(
@@ -115,6 +128,16 @@ def test_on_event_emits_each_stage_in_order():
     assert by_stage["identified"] == {"person_id": "dad", "name": "Dad"}
     assert by_stage["transcribed"] == {"said": "what's my day"}
     assert by_stage["replied"] == {"reply": "Standup at 9"}
+
+
+def test_reply_streamed_to_tts_sentence_by_sentence():
+    m = FakeMemory()
+    m.upsert_person(Person(id="dad", name="Dad", embedding=[0.1], prefs={}))
+    orch, _llm, tts, disp, *_rest = _orch(m, "dad", said="hi", reply="Hi there. All good.")
+    turn = orch.run_once()
+    assert tts.spoken == ["Hi there.", "All good."]  # each sentence spoken as it completes
+    assert turn.replied == "Hi there. All good."
+    assert disp.last is not None and disp.last.text == "Hi there. All good."
 
 
 def test_identify_and_transcribe_run_concurrently():

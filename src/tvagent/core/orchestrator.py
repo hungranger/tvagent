@@ -1,5 +1,6 @@
+import re
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 
 from tvagent.core import ports
@@ -11,6 +12,24 @@ _TONE_PREF_KEY = "tone"
 
 # Per-stage observer for front-ends (e.g. the console): (stage, payload).
 OnEvent = Callable[[str, dict[str, object]], None]
+
+# A sentence ends at . ! ? (optionally closing quote/bracket) followed by whitespace.
+_SENTENCE_END = re.compile(r"[.!?][\"')\]]?\s")
+
+
+def iter_sentences(chunks: Iterable[str]) -> Iterator[str]:
+    """Reassemble streamed text chunks and yield complete sentences as soon as
+    each is finished, then the trailing remainder — so TTS can start speaking the
+    first sentence while the LLM is still generating the rest.
+    """
+    buf = ""
+    for chunk in chunks:
+        buf += chunk
+        while (m := _SENTENCE_END.search(buf)) is not None:
+            yield buf[: m.end()].strip()
+            buf = buf[m.end() :]
+    if buf.strip():
+        yield buf.strip()
 
 
 class Orchestrator:
@@ -64,9 +83,15 @@ class Orchestrator:
         emit("identified", {"person_id": person_id, "name": name})
         emit("transcribed", {"said": said})
         system, user = self._build(person, facts, said)
-        reply = self.llm.respond(system, user, [(h.said, h.replied) for h in history])
+        # Stream the reply: speak each sentence as the LLM finishes it, so the
+        # first words play while the rest is still generating (time-to-first-audio).
+        pairs = [(h.said, h.replied) for h in history]
+        parts: list[str] = []
+        for sentence in iter_sentences(self.llm.stream(system, user, pairs)):
+            self.tts.speak(sentence)
+            parts.append(sentence)
+        reply = " ".join(parts)
         emit("replied", {"reply": reply})
-        self.tts.speak(reply)
         self.display.render(RenderState(person=name, text=reply))
         emit("spoken", {})
         turn = Turn(person_id=person_id, ts=time.time(), said=said, replied=reply)

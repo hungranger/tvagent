@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from typing import Protocol
 
 from tvagent.core.models import AudioClip, Fact, Person, PersonId, RenderState, Turn
@@ -22,6 +23,7 @@ class STT(Protocol):
 
 class LLM(Protocol):
     def respond(self, system: str, user: str, history: list[tuple[str, str]]) -> str: ...
+    def stream(self, system: str, user: str, history: list[tuple[str, str]]) -> Iterator[str]: ...
 
 
 class TTS(Protocol):

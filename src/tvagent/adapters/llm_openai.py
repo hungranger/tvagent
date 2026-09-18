@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from typing import Any
 
 _DEFAULT_MODEL = "llama3.2"  # current 3B chat model: fast on-device, good enough for voice
@@ -31,13 +32,32 @@ class OpenAILLM:
             client = oa.OpenAI(base_url=base_url, api_key=api_key or "not-needed")
         self.client = client
 
-    def respond(self, system: str, user: str, history: list[tuple[str, str]]) -> str:
+    def _messages(
+        self, system: str, user: str, history: list[tuple[str, str]]
+    ) -> list[dict[str, str]]:
         messages: list[dict[str, str]] = [{"role": "system", "content": system}]
         for said, replied in history:
             messages.append({"role": "user", "content": said})
             messages.append({"role": "assistant", "content": replied})
         messages.append({"role": "user", "content": user})
+        return messages
+
+    def respond(self, system: str, user: str, history: list[tuple[str, str]]) -> str:
         resp = self.client.chat.completions.create(
-            model=self.model, max_tokens=self.max_tokens, messages=messages
+            model=self.model,
+            max_tokens=self.max_tokens,
+            messages=self._messages(system, user, history),
         )
         return (resp.choices[0].message.content or "").strip()
+
+    def stream(self, system: str, user: str, history: list[tuple[str, str]]) -> Iterator[str]:
+        resp = self.client.chat.completions.create(
+            model=self.model,
+            max_tokens=self.max_tokens,
+            messages=self._messages(system, user, history),
+            stream=True,
+        )
+        for chunk in resp:
+            delta = chunk.choices[0].delta.content
+            if delta:
+                yield delta

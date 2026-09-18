@@ -1,3 +1,5 @@
+from collections.abc import Iterator
+
 from tvagent.core.models import GUEST, AudioClip, Fact, Person, RenderState, Turn
 
 
@@ -52,6 +54,10 @@ class FakeLLM:
     def respond(self, system: str, user: str, history: list[tuple[str, str]]) -> str:
         self.last_system, self.last_user, self.last_history = system, user, history
         return self._reply
+
+    def stream(self, system: str, user: str, history: list[tuple[str, str]]) -> Iterator[str]:
+        self.last_system, self.last_user, self.last_history = system, user, history
+        yield self._reply
 
 
 class FakeTTS:
