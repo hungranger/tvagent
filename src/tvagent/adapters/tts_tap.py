@@ -4,18 +4,42 @@ from typing import Any
 
 from tvagent.audio import PlaybackReference, resample_pcm
 
-_AEC_RATE = 16000  # far-end reference lives at the AEC/VAD rate
+_AEC_RATE = 16000  # far-end reference / VAD rate
+_DEV_RATE = 48000  # device-native output rate (avoids the duplex -50)
+_BLOCK = 1024  # output samples per device write (~21ms @48k)
 
 
 class TappedTTS:
-    """Wraps a TTS adapter and, on each play, writes the played audio (downsampled
-    to 16k) into a PlaybackReference — the AEC far-end. Lets the barge-in detector
-    subtract the assistant's own voice. Transparent for every other call.
+    """Wraps a TTS adapter and OWNS playback so it can stream the far-end in real
+    time: as each block is fed to the output device, the matching block (at 16k)
+    is written to the PlaybackReference. That keeps the AEC far-end time-aligned
+    with what the mic actually hears — unlike writing the whole clip up front.
+    Everything except play/stop delegates to the inner adapter.
     """
 
-    def __init__(self, inner: Any, reference: PlaybackReference) -> None:
+    def __init__(
+        self,
+        inner: Any,
+        reference: PlaybackReference,
+        dev_rate: int = _DEV_RATE,
+        block: int = _BLOCK,
+        _stream_factory: Any = None,
+    ) -> None:
         self._inner = inner
         self._ref = reference
+        self._dev = dev_rate
+        self._block = block
+        self._stream_factory = _stream_factory or self._default_stream
+        self._stopped = False
+        self._stream: Any = None
+
+    def _default_stream(self, dev_rate: int) -> Any:  # pragma: no cover - real device I/O
+        import sounddevice  # noqa: PLC0415 -- lazy
+
+        sd: Any = sounddevice
+        stream = sd.OutputStream(samplerate=dev_rate, channels=1, dtype="int16")
+        stream.start()
+        return stream
 
     def speak(self, text: str) -> None:
         self._inner.speak(text)
@@ -25,15 +49,39 @@ class TappedTTS:
         return result
 
     def play(self, pcm: bytes) -> None:
-        if pcm:
-            with wave.open(io.BytesIO(pcm)) as wf:
-                raw = wf.readframes(wf.getnframes())
-                rate = wf.getframerate()
-            self._ref.write(resample_pcm(raw, rate, _AEC_RATE))  # far-end for the AEC
-        self._inner.play(pcm)
+        if not pcm:
+            return
+        import numpy as np  # noqa: PLC0415 -- lazy
+
+        npx: Any = np
+        with wave.open(io.BytesIO(pcm)) as wf:
+            raw = wf.readframes(wf.getnframes())
+            src = wf.getframerate()
+        out = npx.frombuffer(resample_pcm(raw, src, self._dev), dtype=np.int16)
+        far = npx.frombuffer(resample_pcm(raw, src, _AEC_RATE), dtype=np.int16)
+        self._stopped = False
+        stream = self._stream_factory(self._dev)
+        self._stream = stream
+        try:
+            oi, n = 0, len(out)
+            while oi < n and not self._stopped:
+                nxt = min(oi + self._block, n)
+                f0 = oi * _AEC_RATE // self._dev
+                f1 = nxt * _AEC_RATE // self._dev
+                self._ref.write(far[f0:f1].tobytes())  # far-end enters ~as this block plays
+                stream.write(out[oi:nxt])
+                oi = nxt
+        finally:
+            stream.close()
+            self._stream = None
 
     def stop(self) -> None:
-        self._inner.stop()
+        self._stopped = True
+        stream = self._stream
+        if stream is not None:
+            abort = getattr(stream, "abort", None)  # pragma: no cover - real device I/O
+            if callable(abort):
+                abort()
 
     def set_voice(self, voice: str) -> None:
         self._inner.set_voice(voice)
