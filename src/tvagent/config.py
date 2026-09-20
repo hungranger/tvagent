@@ -155,10 +155,13 @@ def _with_aec(tts: ports.TTS) -> tuple[ports.TTS, ports.BargeInDetector]:
 def _barge_in() -> ports.BargeInDetector | None:
     import os  # noqa: PLC0415 -- lazy
 
-    if os.environ.get("TVAGENT_BARGE_IN"):  # opt-in; naive stub, needs AEC (see adapter)
-        from tvagent.adapters.bargein_vad import VadBargeIn  # noqa: PLC0415 -- lazy
+    if os.environ.get("TVAGENT_BARGE_IN"):
+        # Wake-word barge-in: say the wake word again to interrupt. No echo cancel,
+        # never self-fires, works on any hardware. TVAGENT_AEC swaps in the
+        # experimental FDAF talk-over path (build_orchestrator, needs linear audio).
+        from tvagent.adapters.bargein_wake import WakeWordBargeIn  # noqa: PLC0415 -- lazy
 
-        return VadBargeIn()
+        return WakeWordBargeIn()
     return None
 
 
