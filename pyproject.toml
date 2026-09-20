@@ -96,7 +96,7 @@ exclude_also = [
     "if self._detector is None:", # lazy real openwakeword model construction
     "if self._source is None:",   # lazy real mic source construction
     "def main\\(\\) -> None:",     # enroll.py CLI glue: mic capture + real embedding model
-    "def _(memory|wake|capture|speaker|stt|llm|tts|display|barge_in)\\(",  # config.py real-adapter factories, tested via overrides
+    "def _(memory|wake|capture|speaker|stt|llm|tts|display|barge_in|with_aec)\\(",  # config.py real-adapter factories, tested via overrides
     "def _load_model",            # hardware-backed model download/load (ECAPA, Piper), tested via stubbed warmup
 ]
 
@@ -151,8 +151,11 @@ modules = [
     "tvagent.adapters.wakeword_oww",
     "tvagent.adapters.audio_vad",
     "tvagent.adapters.bargein_vad",
+    "tvagent.adapters.aec_gain",
+    "tvagent.adapters.aec_fdaf",
     "tvagent.adapters.tts_piper",
     "tvagent.adapters.tts_kokoro",
+    "tvagent.adapters.tts_tap",
     "tvagent.adapters.display_web",
 ]
 

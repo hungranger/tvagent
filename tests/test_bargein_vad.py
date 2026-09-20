@@ -3,29 +3,11 @@ from typing import Any
 
 import numpy
 
+from tvagent.adapters.aec_gain import EchoGainCanceller
 from tvagent.adapters.bargein_vad import VadBargeIn
 from tvagent.audio import PlaybackReference
 
 np: Any = numpy  # numpy's partial stubs trip pyright strict; treat as Any in tests
-
-
-class _SubAEC:
-    """Fake echo canceller: clean = near - far (int16). Proves cancellation, not
-    just passthrough."""
-
-    def process(self, near: bytes, far: bytes) -> bytes:
-        a = np.frombuffer(near, dtype=np.int16).astype(np.int32)
-        b = np.frombuffer(far, dtype=np.int16).astype(np.int32)
-        n = min(len(a), len(b))
-        return (a[:n] - b[:n]).astype(np.int16).tobytes()
-
-
-def _pcm(*samples: int) -> bytes:
-    return np.array(samples, dtype=np.int16).tobytes()
-
-
-def _has_signal(frame: bytes) -> bool:
-    return frame.strip(b"\x00") != b""
 
 
 class _Frames:
@@ -75,31 +57,79 @@ class _BoomSource:
         raise RuntimeError("mic busy")  # raises when the listen loop calls frames()
 
 
-def test_aec_cancels_pure_echo_so_no_false_barge() -> None:
-    # Self-hearing on speakers: the mic frame IS the assistant's playback, and the
-    # raw VAD flags it as speech. With AEC subtracting the played reference, the
-    # cleaned frame is silence -> no barge fires.
-    echo = _pcm(100, 200, 300)
+def _aec_frames(far: Any, near: Any, n: int) -> tuple[Any, PlaybackReference]:
     ref = PlaybackReference()
-    ref.write(echo)  # far-end == what the mic hears
-    src = _Frames([(echo, True)])  # raw is_speech=True (it hears the assistant)
-    det = VadBargeIn(onset_frames=1, _source=src, aec=_SubAEC(), reference=ref, _vad=_has_signal)
-    det.arm()
-    _drain(det)
-    assert det.speaking() is False  # echo cancelled -> not a barge-in
+    frames: list[tuple[bytes, bool]] = []
+    for _ in range(n):
+        ref.write(far.tobytes())  # far-end for this frame
+        frames.append((near.tobytes(), True))  # raw is_speech True (it hears the assistant)
+    return _Frames(frames), ref
 
 
-def test_aec_keeps_real_speech_over_echo_so_barge_fires() -> None:
-    far = _pcm(100, 200, 300)
-    mixed = np.frombuffer(far, np.int16) + np.frombuffer(_pcm(500, 600, 700), np.int16)
-    near = mixed.astype(np.int16).tobytes()  # mic hears speech on top of the echo
+def test_double_talk_gate_ignores_quiet_residual_fires_on_loud() -> None:
+    # The AEC-path speech test is on RESIDUAL ENERGY, not webrtcvad (which flags
+    # even the quiet cancelled residual as speech). Quiet residual = echo, not barge.
+    det = VadBargeIn(_source=_Frames([]), aec=EchoGainCanceller(), reference=PlaybackReference())
+    loud = (np.ones(480) * 2000).astype(np.int16).tobytes()
+    quiet = (np.ones(480) * 50).astype(np.int16).tobytes()
+    assert det._double_talk(loud, quiet) is False  # pyright: ignore[reportPrivateUsage]
+    assert det._double_talk(loud, loud) is True  # pyright: ignore[reportPrivateUsage]
+
+
+def test_no_barge_when_far_silent() -> None:
+    # At turn start the far-end reference is empty (playback just began, echo lags
+    # ~208ms), so aec.process(near, far=0) returns clean==near and the ratio gate is
+    # trivially true -> the detector fired on ambient, aborting playback (-9986).
+    # When the far-end is silent there is nothing to barge over: must NOT fire.
     ref = PlaybackReference()
-    ref.write(far)
-    src = _Frames([(near, True)])
-    det = VadBargeIn(onset_frames=1, _source=src, aec=_SubAEC(), reference=ref, _vad=_has_signal)
+    ref.write((np.zeros(1440)).astype(np.int16).tobytes())  # far-end silence
+    det = VadBargeIn(
+        _source=_Frames([]),
+        sample_rate=48000,
+        aec=EchoGainCanceller(),
+        reference=ref,
+        far_floor=500.0,
+    )
+    loud_near = (np.ones(1440) * 4000).astype(np.int16).tobytes()
+    assert det._detect(loud_near, True) is False  # pyright: ignore[reportPrivateUsage]
+
+
+def test_double_talk_highpass_ignores_low_freq_residual() -> None:
+    # MacBook speaker nonlinearity leaves a loud LOW-band echo residual the linear
+    # AEC can't remove; the coherent (cancellable) band is >1.5kHz. So the gate
+    # high-passes before judging: a loud 300Hz residual must NOT fire, a 3kHz one must.
+    sr, n = 48000, 1440
+    t = np.arange(n) / sr
+    low = (3000 * np.sin(2 * np.pi * 300 * t)).astype(np.int16).tobytes()
+    mid = (3000 * np.sin(2 * np.pi * 3000 * t)).astype(np.int16).tobytes()
+    det = VadBargeIn(_source=_Frames([]), sample_rate=sr, hp_cutoff=1500)
+    assert det._double_talk(low, low) is False  # pyright: ignore[reportPrivateUsage]
+    assert det._double_talk(mid, mid) is True  # pyright: ignore[reportPrivateUsage]
+
+
+def test_aec_no_false_barge_on_pure_echo() -> None:
+    # near == the assistant's own playback (self-hearing). The canceller drives the
+    # residual down; the energy gate must NOT fire.
+    rng = np.random.default_rng(0)
+    far = rng.integers(-8000, 8000, 480).astype(np.int16)
+    near = (0.6 * far).astype(np.int16)  # room echo of the playback
+    src, ref = _aec_frames(far, near, 10)
+    det = VadBargeIn(onset_frames=3, _source=src, aec=EchoGainCanceller(), reference=ref)
     det.arm()
     _drain(det)
-    assert det.speaking() is True  # speech survives cancellation -> barge
+    assert det.speaking() is False
+
+
+def test_aec_barge_on_speech_over_echo() -> None:
+    rng = np.random.default_rng(1)
+    far = rng.integers(-8000, 8000, 480).astype(np.int16)
+    speech = rng.integers(-6000, 6000, 480).astype(np.int16)
+    near = (0.6 * far + speech).astype(np.int16)  # user talks over the echo
+    src, ref = _aec_frames(far, near, 10)
+    det = VadBargeIn(onset_frames=3, _source=src, aec=EchoGainCanceller(), reference=ref)
+    det.arm()
+    _drain(det)
+    assert det.speaking() is True
 
 
 def test_listen_error_is_captured_not_swallowed() -> None:
