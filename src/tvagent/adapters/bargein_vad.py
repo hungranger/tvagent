@@ -54,6 +54,9 @@ class VadBargeIn:
         self._speaking.clear()
         self._stop.clear()
         self.error = None
+        start = getattr(self._source, "start", None)
+        if callable(start):  # DuplexAudio: open the shared mic+speaker stream
+            start()
         self._thread = threading.Thread(target=self._listen, daemon=True)
         self._thread.start()
 
@@ -65,6 +68,9 @@ class VadBargeIn:
         if self._thread is not None:
             self._thread.join(timeout=_JOIN_TIMEOUT)
             self._thread = None
+        stop = getattr(self._source, "stop", None)
+        if callable(stop):  # DuplexAudio: close the shared stream, release the device
+            stop()
 
     def _detect(self, frame: bytes, is_speech: bool) -> bool:
         # With an echo canceller, cancel the assistant's playback and judge the

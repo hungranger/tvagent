@@ -6,7 +6,6 @@ import numpy
 
 from tests.fakes import FakeTTS
 from tvagent.adapters.tts_tap import TappedTTS
-from tvagent.audio import PlaybackReference
 
 np: Any = numpy
 
@@ -21,86 +20,48 @@ def _wav(samples: list[int], rate: int) -> bytes:
     return buf.getvalue()
 
 
-class _FakeStream:
-    """Records the blocks written to the output device."""
+class _FakeSink:
+    """Stand-in for DuplexAudio: records enqueued far-end, reports drained."""
 
     def __init__(self) -> None:
-        self.blocks: list[bytes] = []
+        self.data = b""
+        self.cleared = False
 
-    def write(self, block: Any) -> None:
-        self.blocks.append(bytes(block.tobytes()))
+    def enqueue(self, pcm: bytes) -> None:
+        self.data += pcm
 
-    def close(self) -> None:
-        pass
+    def clear(self) -> None:
+        self.cleared = True
 
-
-def test_play_streams_far_end_block_by_block_aligned_with_output() -> None:
-    ref = PlaybackReference()
-    stream = _FakeStream()
-
-    def factory(_rate: int) -> _FakeStream:
-        return stream
-
-    tapped = TappedTTS(FakeTTS(), ref, dev_rate=16000, block=128, _stream_factory=factory)
-    samples = list(range(300))  # 300 samples @16k
-    tapped.play(_wav(samples, 16000))
-    # far-end captured incrementally, in more than one block (not all at once)
-    assert len(stream.blocks) > 1
-    # and it equals the full played audio (16k in -> 16k far-end, identity)
-    assert ref.read(600) == np.array(samples, dtype=np.int16).tobytes()
-    # output device received the same audio
-    assert b"".join(stream.blocks) == np.array(samples, dtype=np.int16).tobytes()
+    def pending(self) -> int:
+        return 0  # drained immediately so play() returns
 
 
-def test_stop_halts_streaming_midway() -> None:
-    ref = PlaybackReference()
-
-    class _StopAfterOne:
-        def __init__(self) -> None:
-            self.blocks = 0
-
-        def write(self, block: Any) -> None:
-            self.blocks += 1
-            tapped.stop()  # user barges in after the first block
-
-        def close(self) -> None:
-            pass
-
-    s = _StopAfterOne()
-
-    def factory(_rate: int) -> _StopAfterOne:
-        return s
-
-    tapped = TappedTTS(FakeTTS(), ref, dev_rate=16000, block=128, _stream_factory=factory)
-    tapped.play(_wav(list(range(1000)), 16000))  # 8 blocks if not stopped
-    assert s.blocks == 1  # halted right after the first block
+def test_play_enqueues_resampled_far_end_into_sink() -> None:
+    sink = _FakeSink()
+    tapped = TappedTTS(FakeTTS(), sink, dev_rate=16000)  # type: ignore[arg-type]
+    samples = list(range(300))
+    tapped.play(_wav(samples, 16000))  # 16k in -> 16k dev: identity
+    assert sink.data == np.array(samples, dtype=np.int16).tobytes()
 
 
-def test_stop_swallows_write_error_from_abort() -> None:
-    # Barge-in calls stop() -> stream.abort() from another thread WHILE play() is
-    # mid-write; the aborted stream then raises on write (PortAudio -9986). play()
-    # must treat that as the expected stop, not crash the playback thread.
-    ref = PlaybackReference()
-
-    class _AbortOnWrite:
-        def write(self, block: Any) -> None:
-            tapped.stop()  # sets _stopped and "aborts"
-            raise RuntimeError("PortAudio error [-9986]")  # aborted stream raises
-
-        def close(self) -> None:
-            pass
-
-    def factory(_rate: int) -> _AbortOnWrite:
-        return _AbortOnWrite()
-
-    tapped = TappedTTS(FakeTTS(), ref, dev_rate=16000, block=128, _stream_factory=factory)
-    tapped.play(_wav(list(range(1000)), 16000))  # must not raise
+def test_play_ignores_empty_pcm() -> None:
+    sink = _FakeSink()
+    tapped = TappedTTS(FakeTTS(), sink, dev_rate=16000)  # type: ignore[arg-type]
+    tapped.play(b"")
+    assert sink.data == b""
 
 
-def test_synth_speak_stop_and_voice_delegate() -> None:
+def test_stop_clears_the_sink() -> None:
+    sink = _FakeSink()
+    tapped = TappedTTS(FakeTTS(), sink, dev_rate=16000)  # type: ignore[arg-type]
+    tapped.stop()
+    assert sink.cleared is True
+
+
+def test_synth_speak_and_voice_delegate() -> None:
     inner = FakeTTS()
-    tapped = TappedTTS(inner, PlaybackReference())
+    tapped = TappedTTS(inner, _FakeSink())  # type: ignore[arg-type]
     assert tapped.synth("hi")[0] == b"hi"
     tapped.speak("yo")
     assert inner.spoken == ["hi", "yo"]
-    tapped.warmup()  # no warmup on FakeTTS -> safe no-op

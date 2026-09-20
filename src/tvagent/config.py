@@ -126,27 +126,30 @@ def _with_aec(tts: ports.TTS) -> tuple[ports.TTS, ports.BargeInDetector]:
     from tvagent.adapters.aec_fdaf import FdafEchoCanceller  # noqa: PLC0415 -- lazy
     from tvagent.adapters.bargein_vad import VadBargeIn  # noqa: PLC0415 -- lazy
     from tvagent.adapters.tts_tap import TappedTTS  # noqa: PLC0415 -- lazy
-    from tvagent.audio import MicSource, PlaybackReference  # noqa: PLC0415 -- lazy
+    from tvagent.audio import DuplexAudio  # noqa: PLC0415 -- lazy
 
-    # Runs at 48k NATIVE (no resample) so the AEC can cancel the coherent >1.5kHz
-    # band; MacBook speaker nonlinearity ruins the low band and 16k resampling
-    # aliases the good band away (measured: coherence 0.84 -> 8dB linear ceiling).
-    # The FDAF (12288 taps = 256ms @48k) learns the ~208ms echo delay itself, so no
-    # priming. onset=6 (180ms) clears residual-echo blips; a real talker sustains.
+    # One full-duplex 48k stream plays the far-end AND captures the mic on a single
+    # clock, so the AEC gets time-aligned near/far. A separate mic+speaker pair
+    # drifts (far written ahead of playback) and cancellation collapses (measured
+    # live: clean==near). Runs at 48k so the coherent >1.5kHz band survives (16k
+    # resampling aliases it; MacBook speaker nonlinearity ruins the low band ->
+    # 8dB linear ceiling). FDAF (12288 taps=256ms) learns the ~208ms echo delay.
+    # onset=6 (~180ms @30ms frames) clears residual-echo blips; a talker sustains.
     rate = int(os.environ.get("TVAGENT_AEC_RATE", "48000"))
     taps = int(os.environ.get("TVAGENT_AEC_TAPS", "12288"))
-    onset = int(os.environ.get("TVAGENT_AEC_ONSET", "6"))
+    onset = int(os.environ.get("TVAGENT_AEC_ONSET", "12"))
     hp = float(os.environ.get("TVAGENT_AEC_HP", "1500"))
-    ref = PlaybackReference()
+    block = int(rate * 30 / 1000)  # 30ms blocks -> matches the offline AEC validation
+    duplex = DuplexAudio(rate=rate, block=block)
     detector = VadBargeIn(
         sample_rate=rate,
         onset_frames=onset,
         aec=FdafEchoCanceller(taps=taps),
-        reference=ref,
+        reference=duplex.far,
         hp_cutoff=hp,
-        _source=MicSource(rate, use_vad=False),
+        _source=duplex,
     )
-    return TappedTTS(tts, ref, dev_rate=rate), detector
+    return TappedTTS(tts, duplex, dev_rate=rate), detector
 
 
 def _barge_in() -> ports.BargeInDetector | None:
