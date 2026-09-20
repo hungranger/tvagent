@@ -29,13 +29,16 @@ class VadBargeIn:
         reference: PlaybackReference | None = None,
         residual_rms: float = _RESIDUAL_RMS,
         ratio: float = _DOUBLETALK_RATIO,
+        hp_cutoff: float = 0.0,
     ) -> None:
         self._onset = onset_frames
+        self._sr = sample_rate
         self._source: Any = _source or MicSource(sample_rate)
         self._aec = aec
         self._reference = reference
         self._residual = residual_rms
         self._ratio = ratio
+        self._hp_cutoff = hp_cutoff  # >0: judge only the coherent >cutoff band
         self._speaking = threading.Event()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -66,15 +69,26 @@ class VadBargeIn:
         return self._double_talk(frame, self._aec.process(frame, far))
 
     def _double_talk(self, near: bytes, clean: bytes) -> bool:
+        near_rms = self._band_rms(near)
+        clean_rms = self._band_rms(clean)
+        # Loud enough to be real speech AND a big fraction survived cancellation.
+        return clean_rms > self._residual and clean_rms > self._ratio * near_rms
+
+    def _band_rms(self, buf: bytes) -> float:
+        # RMS of the signal, restricted to >hp_cutoff when set. The low band is the
+        # speaker's nonlinear echo residual the AEC can't remove; the coherent
+        # (cancellable) band is >~1.5kHz, so the gate judges only that.
         import numpy as np  # noqa: PLC0415 -- lazy
 
         npx: Any = np
-        n = npx.frombuffer(near, dtype=np.int16).astype(np.float64)
-        c = npx.frombuffer(clean, dtype=np.int16).astype(np.float64)
-        near_rms = float(npx.sqrt(npx.mean(n * n))) if len(n) else 0.0
-        clean_rms = float(npx.sqrt(npx.mean(c * c))) if len(c) else 0.0
-        # Loud enough to be real speech AND a big fraction survived cancellation.
-        return clean_rms > self._residual and clean_rms > self._ratio * near_rms
+        x = npx.frombuffer(buf, dtype=np.int16).astype(np.float64)
+        if len(x) == 0:
+            return 0.0
+        if self._hp_cutoff > 0:
+            spec = npx.fft.rfft(x)
+            spec[npx.fft.rfftfreq(len(x), 1.0 / self._sr) < self._hp_cutoff] = 0
+            x = npx.fft.irfft(spec, n=len(x))
+        return float(npx.sqrt(npx.mean(x * x)))
 
     def _listen(self) -> None:
         run = 0

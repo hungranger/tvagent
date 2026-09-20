@@ -4,8 +4,7 @@ from typing import Any
 
 from tvagent.audio import PlaybackReference, resample_pcm
 
-_AEC_RATE = 16000  # far-end reference / VAD rate
-_DEV_RATE = 48000  # device-native output rate (avoids the duplex -50)
+_DEV_RATE = 48000  # device-native output rate (avoids the duplex -50); also far-end rate
 _BLOCK = 1024  # output samples per device write (~21ms @48k)
 
 
@@ -58,7 +57,6 @@ class TappedTTS:
             raw = wf.readframes(wf.getnframes())
             src = wf.getframerate()
         out = npx.frombuffer(resample_pcm(raw, src, self._dev), dtype=np.int16)
-        far = npx.frombuffer(resample_pcm(raw, src, _AEC_RATE), dtype=np.int16)
         self._stopped = False
         stream = self._stream_factory(self._dev)
         self._stream = stream
@@ -66,9 +64,10 @@ class TappedTTS:
             oi, n = 0, len(out)
             while oi < n and not self._stopped:
                 nxt = min(oi + self._block, n)
-                f0 = oi * _AEC_RATE // self._dev
-                f1 = nxt * _AEC_RATE // self._dev
-                self._ref.write(far[f0:f1].tobytes())  # far-end enters ~as this block plays
+                # far-end = exactly what plays, at device rate. Kept full-band (no
+                # downsample to 16k): the AEC runs at 48k so it can use the coherent
+                # high band the resampler would alias away.
+                self._ref.write(out[oi:nxt].tobytes())
                 stream.write(out[oi:nxt])
                 oi = nxt
         finally:

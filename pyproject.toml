@@ -152,6 +152,7 @@ modules = [
     "tvagent.adapters.audio_vad",
     "tvagent.adapters.bargein_vad",
     "tvagent.adapters.aec_gain",
+    "tvagent.adapters.aec_fdaf",
     "tvagent.adapters.tts_piper",
     "tvagent.adapters.tts_kokoro",
     "tvagent.adapters.tts_tap",

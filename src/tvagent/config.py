@@ -123,18 +123,30 @@ def _tts() -> ports.TTS:
 def _with_aec(tts: ports.TTS) -> tuple[ports.TTS, ports.BargeInDetector]:
     import os  # noqa: PLC0415 -- lazy
 
-    from tvagent.adapters.aec_gain import EchoGainCanceller  # noqa: PLC0415 -- lazy
+    from tvagent.adapters.aec_fdaf import FdafEchoCanceller  # noqa: PLC0415 -- lazy
     from tvagent.adapters.bargein_vad import VadBargeIn  # noqa: PLC0415 -- lazy
     from tvagent.adapters.tts_tap import TappedTTS  # noqa: PLC0415 -- lazy
-    from tvagent.audio import PlaybackReference  # noqa: PLC0415 -- lazy
+    from tvagent.audio import MicSource, PlaybackReference  # noqa: PLC0415 -- lazy
 
+    # Runs at 48k NATIVE (no resample) so the AEC can cancel the coherent >1.5kHz
+    # band; MacBook speaker nonlinearity ruins the low band and 16k resampling
+    # aliases the good band away (measured: coherence 0.84 -> 8dB linear ceiling).
+    # The FDAF (12288 taps = 256ms @48k) learns the ~208ms echo delay itself, so no
+    # priming. onset=6 (180ms) clears residual-echo blips; a real talker sustains.
+    rate = int(os.environ.get("TVAGENT_AEC_RATE", "48000"))
+    taps = int(os.environ.get("TVAGENT_AEC_TAPS", "12288"))
+    onset = int(os.environ.get("TVAGENT_AEC_ONSET", "6"))
+    hp = float(os.environ.get("TVAGENT_AEC_HP", "1500"))
     ref = PlaybackReference()
-    # Prime with the round-trip delay so the far-end lags the near-end mic and the
-    # canceller lines them up (measured via scripts/aec_calibrate.py).
-    delay_ms = float(os.environ.get("TVAGENT_AEC_DELAY_MS", "105"))
-    ref.write(b"\x00\x00" * int(16000 * delay_ms / 1000))
-    detector = VadBargeIn(aec=EchoGainCanceller(), reference=ref)
-    return TappedTTS(tts, ref), detector
+    detector = VadBargeIn(
+        sample_rate=rate,
+        onset_frames=onset,
+        aec=FdafEchoCanceller(taps=taps),
+        reference=ref,
+        hp_cutoff=hp,
+        _source=MicSource(rate, use_vad=False),
+    )
+    return TappedTTS(tts, ref, dev_rate=rate), detector
 
 
 def _barge_in() -> ports.BargeInDetector | None:

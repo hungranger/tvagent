@@ -60,14 +60,17 @@ class PlaybackReference:
 
 
 class MicSource:
-    def __init__(self, sample_rate: int) -> None:
+    def __init__(self, sample_rate: int, use_vad: bool = True) -> None:
         import sounddevice  # noqa: PLC0415 -- lazy: no mic/backend needed to test logic
-        import webrtcvad  # noqa: PLC0415 -- lazy
 
         self.sample_rate = sample_rate
-        wv: Any = webrtcvad
-        self.vad: Any = wv.Vad(_VAD_AGGRESSIVENESS)
         self.sd: Any = sounddevice
+        self.vad: Any = None
+        if use_vad:  # webrtcvad only accepts 8/16/32k; the AEC path runs at 48k (off)
+            import webrtcvad  # noqa: PLC0415 -- lazy
+
+            wv: Any = webrtcvad
+            self.vad = wv.Vad(_VAD_AGGRESSIVENESS)
 
     def frames(self) -> Iterator[tuple[bytes, bool]]:
         frame_ms, sr = _FRAME_MS, self.sample_rate
@@ -78,5 +81,5 @@ class MicSource:
             while True:
                 data, _ = stream.read(n)
                 frame: bytes = bytes(data)
-                is_speech: bool = self.vad.is_speech(frame, sr)
+                is_speech: bool = self.vad.is_speech(frame, sr) if self.vad else False
                 yield frame, is_speech

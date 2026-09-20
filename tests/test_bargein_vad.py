@@ -76,6 +76,19 @@ def test_double_talk_gate_ignores_quiet_residual_fires_on_loud() -> None:
     assert det._double_talk(loud, loud) is True  # pyright: ignore[reportPrivateUsage]
 
 
+def test_double_talk_highpass_ignores_low_freq_residual() -> None:
+    # MacBook speaker nonlinearity leaves a loud LOW-band echo residual the linear
+    # AEC can't remove; the coherent (cancellable) band is >1.5kHz. So the gate
+    # high-passes before judging: a loud 300Hz residual must NOT fire, a 3kHz one must.
+    sr, n = 48000, 1440
+    t = np.arange(n) / sr
+    low = (3000 * np.sin(2 * np.pi * 300 * t)).astype(np.int16).tobytes()
+    mid = (3000 * np.sin(2 * np.pi * 3000 * t)).astype(np.int16).tobytes()
+    det = VadBargeIn(_source=_Frames([]), sample_rate=sr, hp_cutoff=1500)
+    assert det._double_talk(low, low) is False  # pyright: ignore[reportPrivateUsage]
+    assert det._double_talk(mid, mid) is True  # pyright: ignore[reportPrivateUsage]
+
+
 def test_aec_no_false_barge_on_pure_echo() -> None:
     # near == the assistant's own playback (self-hearing). The canceller drives the
     # residual down; the energy gate must NOT fire.
