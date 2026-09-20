@@ -68,7 +68,12 @@ class TappedTTS:
                 # downsample to 16k): the AEC runs at 48k so it can use the coherent
                 # high band the resampler would alias away.
                 self._ref.write(out[oi:nxt].tobytes())
-                stream.write(out[oi:nxt])
+                try:
+                    stream.write(out[oi:nxt])
+                except Exception:  # barge-in stop() aborts the stream mid-write
+                    if self._stopped:
+                        break  # expected: barge-in aborted the stream (PortAudio -9986)
+                    raise
                 oi = nxt
         finally:
             stream.close()

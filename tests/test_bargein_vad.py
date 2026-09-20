@@ -76,6 +76,24 @@ def test_double_talk_gate_ignores_quiet_residual_fires_on_loud() -> None:
     assert det._double_talk(loud, loud) is True  # pyright: ignore[reportPrivateUsage]
 
 
+def test_no_barge_when_far_silent() -> None:
+    # At turn start the far-end reference is empty (playback just began, echo lags
+    # ~208ms), so aec.process(near, far=0) returns clean==near and the ratio gate is
+    # trivially true -> the detector fired on ambient, aborting playback (-9986).
+    # When the far-end is silent there is nothing to barge over: must NOT fire.
+    ref = PlaybackReference()
+    ref.write((np.zeros(1440)).astype(np.int16).tobytes())  # far-end silence
+    det = VadBargeIn(
+        _source=_Frames([]),
+        sample_rate=48000,
+        aec=EchoGainCanceller(),
+        reference=ref,
+        far_floor=500.0,
+    )
+    loud_near = (np.ones(1440) * 4000).astype(np.int16).tobytes()
+    assert det._detect(loud_near, True) is False  # pyright: ignore[reportPrivateUsage]
+
+
 def test_double_talk_highpass_ignores_low_freq_residual() -> None:
     # MacBook speaker nonlinearity leaves a loud LOW-band echo residual the linear
     # AEC can't remove; the coherent (cancellable) band is >1.5kHz. So the gate

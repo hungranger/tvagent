@@ -76,6 +76,27 @@ def test_stop_halts_streaming_midway() -> None:
     assert s.blocks == 1  # halted right after the first block
 
 
+def test_stop_swallows_write_error_from_abort() -> None:
+    # Barge-in calls stop() -> stream.abort() from another thread WHILE play() is
+    # mid-write; the aborted stream then raises on write (PortAudio -9986). play()
+    # must treat that as the expected stop, not crash the playback thread.
+    ref = PlaybackReference()
+
+    class _AbortOnWrite:
+        def write(self, block: Any) -> None:
+            tapped.stop()  # sets _stopped and "aborts"
+            raise RuntimeError("PortAudio error [-9986]")  # aborted stream raises
+
+        def close(self) -> None:
+            pass
+
+    def factory(_rate: int) -> _AbortOnWrite:
+        return _AbortOnWrite()
+
+    tapped = TappedTTS(FakeTTS(), ref, dev_rate=16000, block=128, _stream_factory=factory)
+    tapped.play(_wav(list(range(1000)), 16000))  # must not raise
+
+
 def test_synth_speak_stop_and_voice_delegate() -> None:
     inner = FakeTTS()
     tapped = TappedTTS(inner, PlaybackReference())

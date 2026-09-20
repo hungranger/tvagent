@@ -17,6 +17,10 @@ _JOIN_TIMEOUT = 1.0
 # real speech AND a large fraction of the input survived cancellation (double-talk).
 _RESIDUAL_RMS = float(os.environ.get("TVAGENT_AEC_RESIDUAL", "300"))
 _DOUBLETALK_RATIO = float(os.environ.get("TVAGENT_AEC_RATIO", "0.5"))
+# Far-end energy floor. When the reference (what's playing) is below this, the
+# assistant isn't really speaking, so there's no echo to cancel and nothing to
+# barge over -- and clean==near would make the ratio gate fire on any ambient.
+_FAR_FLOOR = float(os.environ.get("TVAGENT_AEC_FARFLOOR", "500"))
 
 
 class VadBargeIn:
@@ -30,6 +34,7 @@ class VadBargeIn:
         residual_rms: float = _RESIDUAL_RMS,
         ratio: float = _DOUBLETALK_RATIO,
         hp_cutoff: float = 0.0,
+        far_floor: float = _FAR_FLOOR,
     ) -> None:
         self._onset = onset_frames
         self._sr = sample_rate
@@ -39,6 +44,7 @@ class VadBargeIn:
         self._residual = residual_rms
         self._ratio = ratio
         self._hp_cutoff = hp_cutoff  # >0: judge only the coherent >cutoff band
+        self._far_floor = far_floor  # below this the assistant is silent: nothing to barge over
         self._speaking = threading.Event()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -66,7 +72,16 @@ class VadBargeIn:
         if self._aec is None or self._reference is None:
             return is_speech
         far = self._reference.read(len(frame))
+        if self._raw_rms(far) < self._far_floor:  # assistant silent: nothing to barge over
+            return False
         return self._double_talk(frame, self._aec.process(frame, far))
+
+    def _raw_rms(self, buf: bytes) -> float:
+        import numpy as np  # noqa: PLC0415 -- lazy
+
+        npx: Any = np
+        x = npx.frombuffer(buf, dtype=np.int16).astype(np.float64)
+        return float(npx.sqrt(npx.mean(x * x))) if len(x) else 0.0
 
     def _double_talk(self, near: bytes, clean: bytes) -> bool:
         near_rms = self._band_rms(near)
