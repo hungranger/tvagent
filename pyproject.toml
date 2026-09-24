@@ -5,7 +5,7 @@ requires-python = ">=3.11"
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["pytest", "ruff==0.15.7", "pyright", "pytest-cov", "pre-commit", "vulture", "import-linter", "pip-audit"]
+dev = ["pytest", "ruff==0.16.8", "pyright", "pytest-cov", "pre-commit", "vulture", "import-linter", "pip-audit"]
 # webrtcvad-wheels (maintained fork, prebuilt wheels): drop-in `import webrtcvad`,
 # but without the original's `import pkg_resources` — which breaks on setuptools>=81
 # (removed) and would otherwise force a pin to CVE-affected setuptools<81.
