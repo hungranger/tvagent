@@ -1,0 +1,71 @@
+# Go quality-gate profile. Go-native tools (impl_lang="go"); no Rust tool displaces them.
+# Config uses .golangci.toml (not YAML) so the complexity threshold is drift-checkable.
+
+[gates.lint]
+tools = ["golangci-lint"]
+impl_lang = "go"
+threshold_mechanism = "none"
+blocking = true
+
+[gates.format]
+tools = ["gofmt"]
+impl_lang = "go"
+threshold_mechanism = "none"
+blocking = true
+
+[gates.types]
+tools = ["go vet", "staticcheck"]
+impl_lang = "go"
+threshold_mechanism = "none"
+blocking = true
+
+[gates.coverage]
+tools = ["go test"]
+impl_lang = "go"
+threshold_key = "coverage_floor"
+threshold_mechanism = "flag"         # awk gate on `go tool cover -func` total in ci-steps.yml
+blocking = true
+
+[gates.complexity]
+tools = ["golangci-lint"]            # gocyclo
+impl_lang = "go"
+threshold_key = "complexity_max"
+threshold_mechanism = "config"       # .golangci.toml linters.settings.gocyclo.min-complexity
+blocking = true
+
+[gates.deadcode]
+tools = ["staticcheck"]
+impl_lang = "go"
+threshold_mechanism = "none"
+blocking = true
+
+[gates.mutation]
+tools = ["gremlins"]
+impl_lang = "go"
+threshold_mechanism = "none"
+blocking = false                     # gremlins is young; visibility only
+
+[gates.audit]
+tools = ["govulncheck"]
+impl_lang = "go"
+threshold_mechanism = "none"
+blocking = true
+
+[drift]
+".golangci.toml#linters.settings.gocyclo.min-complexity" = "complexity_max"
+
+[coverage]
+metric = "line"
+
+[measure]
+coverage = "go test -coverprofile=c.out ./... && go tool cover -func=c.out | awk '/^total:/{print $3}'"
+complexity = "golangci-lint run --enable-only gocyclo"
+lint = "golangci-lint run"
+types = "go vet ./... && staticcheck ./..."
+deadcode = "staticcheck -checks U1000 ./..."
+mutation = "gremlins unleash"
+audit = "govulncheck ./..."
+
+[greenfield]
+coverage_floor = 80
+complexity_max = 15
