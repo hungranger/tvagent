@@ -1,0 +1,87 @@
+# Python quality-gate profile. Native config lives in templates/ (copied with
+# a trailing .tmpl stripped and {{<manifest_key>}} tokens filled by
+# gate_setup.render). Tokens may only be KEY_DIRECTIONS keys.
+
+[gates.coverage]
+tools = ["pytest-cov"]
+impl_lang = "python"
+threshold_key = "coverage_floor"
+threshold_mechanism = "config"      # [tool.coverage.report] fail_under
+blocking = true
+
+[gates.complexity]
+tools = ["ruff"]
+impl_lang = "rust"                   # ruff's mccabe check is the rust-native tool
+threshold_key = "complexity_max"
+threshold_mechanism = "config"       # [tool.ruff.lint.mccabe] max-complexity
+blocking = true
+
+[gates.lint]
+tools = ["ruff"]
+impl_lang = "rust"                   # RUST-NATIVE-FIRST: ruff before any python linter
+threshold_key = "lint_rules"
+threshold_mechanism = "config"       # [tool.ruff.lint] select
+blocking = true
+
+[gates.types]
+tools = ["pyright"]
+impl_lang = "node"
+threshold_key = "type_strictness"
+threshold_mechanism = "config"       # [tool.pyright] typeCheckingMode
+blocking = true
+
+[gates.deadcode]
+tools = ["vulture"]
+impl_lang = "python"
+threshold_key = "vulture_confidence"
+threshold_mechanism = "config"       # [tool.vulture] min_confidence
+blocking = true
+
+[gates.mutation]
+tools = ["mutmut"]
+impl_lang = "python"
+threshold_key = "mutation_floor"
+threshold_mechanism = "flag"         # nightly-mutation.yml: mutation_score.py --min
+blocking = true
+
+[gates.arch]
+tools = ["import-linter"]
+impl_lang = "python"
+threshold_key = "arch_contracts_min"
+threshold_mechanism = "none"         # a contract COUNT, not a single config scalar -> no drift bind
+blocking = true
+
+[gates.suppressions]
+tools = ["suppression_diff"]
+impl_lang = "python"
+threshold_mechanism = "none"         # visibility only (non-blocking)
+blocking = false
+
+# native value == manifest value (checked by manifest.check-drift).
+[drift]
+"pyproject.toml#tool.coverage.report.fail_under" = "coverage_floor"
+"pyproject.toml#tool.ruff.lint.mccabe.max-complexity" = "complexity_max"
+"pyproject.toml#tool.ruff.lint.select" = "lint_rules"
+"pyproject.toml#tool.pyright.typeCheckingMode" = "type_strictness"
+"pyproject.toml#tool.vulture.min_confidence" = "vulture_confidence"
+
+[coverage]
+metric = "branch"
+
+[measure]
+coverage = "pytest --cov --cov-report=term-missing"
+complexity = "ruff check --select C901 ."
+lint = "ruff check ."
+types = "pyright"
+deadcode = "vulture src tests .vulture_allowlist.py --min-confidence 60"
+mutation = "mutmut run && python scripts/mutation_score.py"
+arch = "lint-imports"
+
+[greenfield]
+coverage_floor = 90
+complexity_max = 10
+mutation_floor = 80
+vulture_confidence = 60
+arch_contracts_min = 1
+type_strictness = "strict"
+lint_rules = ["E", "F", "I", "UP", "B", "SIM", "PL", "RUF", "N", "C4", "C901", "PTH"]
