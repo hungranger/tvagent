@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import fnmatch
 import json
+import os
 import re
 import sys
 import tomllib
@@ -136,25 +137,36 @@ def _matches(rel: PurePosixPath, pattern: str) -> bool:
     )
 
 
-def _relative(file_path: str) -> PurePosixPath:
-    """Repo-relative path with `..`/symlinks collapsed; outside the repo -> absolute path."""
-    resolved = (Path.cwd() / file_path).resolve()
+def _rel_to_repo(p: Path) -> PurePosixPath:
     try:
-        return PurePosixPath(resolved.relative_to(Path.cwd().resolve()).as_posix())
+        return PurePosixPath(p.relative_to(Path.cwd().resolve()).as_posix())
     except ValueError:
-        return PurePosixPath(resolved.as_posix())
+        return PurePosixPath(p.as_posix())  # outside repo: absolute (name/dir checks still apply)
 
 
-def _is_protected_path(file_path: str, basenames: set[str], patterns: list[str]) -> bool:
-    rel = _relative(file_path)
+def _candidates(file_path: str) -> list[PurePosixPath]:
+    """Lexical (`..` collapsed, symlinks NOT followed) and resolved paths; protected if either hits."""
+    cwd = Path.cwd().resolve()
+    try:
+        lexical = Path(os.path.normpath(cwd / file_path))
+        return [_rel_to_repo(lexical), _rel_to_repo(lexical.resolve())]
+    except Exception:  # e.g. embedded NUL: never silently allow
+        return [PurePosixPath(file_path)]
+
+
+def _rel_protected(rel: PurePosixPath, basenames: set[str], patterns: list[str]) -> bool:
     parts = rel.parts
-    if rel.name in basenames or (rel.name in ROOT_ONLY and len(rel.parts) == 1):
+    if rel.name in basenames or (rel.name in ROOT_ONLY and len(parts) == 1):
         return True
     if any(_has_run(parts, d) for d in PROTECTED_DIRS):
         return True
     if any(parts[-len(sfx) :] == sfx for sfx in PROTECTED_SUFFIXES if len(parts) >= len(sfx)):
         return True
     return any(_matches(rel, pat) for pat in patterns)
+
+
+def _is_protected_path(file_path: str, basenames: set[str], patterns: list[str]) -> bool:
+    return any(_rel_protected(r, basenames, patterns) for r in _candidates(file_path))
 
 
 def _protected_tokens(basenames: set[str]) -> list[str]:

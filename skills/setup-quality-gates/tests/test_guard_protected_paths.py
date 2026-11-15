@@ -111,3 +111,21 @@ def test_bash_write_to_glob_protected_dir_asks(tmp_path: Path):
         check=False,
     )
     assert '"ask"' in p.stdout
+
+
+def test_symlinked_settings_json_asks(tmp_path: Path):
+    repo, outside = tmp_path / "repo", tmp_path / "outside"
+    (repo / ".claude").mkdir(parents=True)
+    outside.mkdir()
+    (outside / "s.json").write_text("{}")
+    (repo / ".claude" / "settings.json").symlink_to(outside / "s.json")
+    assert _asks(repo, ".claude/settings.json")
+
+
+def test_symlinked_root_package_json_asks(tmp_path: Path):
+    repo, outside = tmp_path / "repo", tmp_path / "outside"
+    repo.mkdir()
+    outside.mkdir()
+    (outside / "p.json").write_text("{}")
+    (repo / "package.json").symlink_to(outside / "p.json")
+    assert _asks(repo, "package.json")
