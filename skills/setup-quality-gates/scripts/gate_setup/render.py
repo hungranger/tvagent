@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from pathlib import Path
@@ -22,17 +23,39 @@ def _sub(text: str, manifest: dict[str, Any]) -> str:
     return _TOKEN.sub(one, text)
 
 
+def _dump(manifest: dict[str, Any], drift: dict[str, str]) -> str:
+    """Manifest + profile drift map as TOML (json.dumps scalars/lists are valid TOML)."""
+    tables = {**manifest, "drift": {**manifest.get("drift", {}), **drift}}
+    lines: list[str] = []
+    for name in ("meta", "thresholds", "protected", "drift"):
+        if tables.get(name):
+            lines.append(f"[{name}]")
+            lines += [f"{json.dumps(k)} = {json.dumps(v)}" for k, v in tables[name].items()]
+            lines.append("")
+    return "\n".join(lines)
+
+
 def render(profile_dir: Path, manifest: dict[str, Any]) -> dict[str, str]:
     profile = load_profile(profile_dir)
-    for g in gates_of(profile).values():  # fail early if a gated key has no value
-        if g.get("threshold_mechanism") in ("flag", "config"):
-            get(manifest, g["threshold_key"])
+    raw = profile.get("drift", {})
+    drift: dict[str, str] = raw if isinstance(raw, dict) else {}  # pyright: ignore[reportUnknownVariableType]
+    for name, g in gates_of(profile).items():  # fail early if a gated key is unusable
+        mech = g.get("threshold_mechanism")
+        if mech not in ("flag", "config"):
+            continue
+        key = g.get("threshold_key")
+        if not isinstance(key, str):
+            raise ManifestError(f"gate {name} missing threshold_key")
+        get(manifest, key)
+        if mech == "config" and key not in drift.values():
+            raise ManifestError(f"gate {name}: config-only {key} has no [drift] binding")
     root = profile_dir / "templates"
     out = {
         p.relative_to(root).as_posix().removesuffix(".tmpl"): _sub(p.read_text(), manifest)
         for p in sorted(root.rglob("*"))
         if p.is_file()
     }
+    out["quality-gates.toml"] = _dump(manifest, drift)
     for rel, text in out.items():
         if "{{" in text:
             raise ManifestError(f"{rel}: residual '{{{{' after render")

@@ -19,7 +19,10 @@ def _load(tmp_path: Path, text: str) -> dict:
 def _cli(tmp_path: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, "-m", "gate_setup.manifest", *args],
-        cwd=tmp_path, capture_output=True, text=True, check=False,
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
         env={"PYTHONPATH": str(SKILL / "scripts")},
     )
 
@@ -63,8 +66,7 @@ def test_get_missing_exits_nonzero(tmp_path: Path):
 def test_check_drift(tmp_path: Path):
     (tmp_path / "native.toml").write_text("[tool]\nfloor = 70\n")
     base = (
-        "[thresholds]\ncoverage_floor = %d\n"
-        '[drift]\n"native.toml#tool.floor" = "coverage_floor"\n'
+        '[thresholds]\ncoverage_floor = %d\n[drift]\n"native.toml#tool.floor" = "coverage_floor"\n'
     )
     (tmp_path / "quality-gates.toml").write_text(base % 70)
     assert _cli(tmp_path, "check-drift", "--profile", ".").returncode == 0
@@ -119,3 +121,12 @@ def test_check_drift_missing_binding_fails(tmp_path: Path):
     (tmp_path / "quality-gates.toml").write_text("[thresholds]\ncomplexity_max = 9\n")
     r = _cli(tmp_path, "check-drift", "--profile", ".", "--gates", str(prof))
     assert r.returncode == 1 and "complexity_max" in r.stderr
+
+
+def test_check_drift_nonstring_binding_is_drift(tmp_path: Path):
+    prof = SKILL / "tests" / "fixtures" / "profile_fake"
+    (tmp_path / "quality-gates.toml").write_text(
+        '[thresholds]\ncomplexity_max = 9\n[drift]\n"x#y" = ["a"]\n'
+    )
+    r = _cli(tmp_path, "check-drift", "--profile", ".", "--gates", str(prof))
+    assert r.returncode == 1 and "Traceback" not in r.stderr

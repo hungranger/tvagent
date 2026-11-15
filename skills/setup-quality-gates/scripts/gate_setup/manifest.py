@@ -140,6 +140,9 @@ def check_drift(manifest: dict[str, Any], base: Path, gates: Path | None = None)
     except ManifestError as e:
         return [str(e)]
     for spec, mkey in drift.items():
+        if not isinstance(mkey, str):
+            out.append(f"{spec}: drift binding must be a string, got {mkey!r}")
+            continue
         try:
             nat = _native(spec, base)
             want = _lookup(manifest, mkey)
@@ -149,7 +152,7 @@ def check_drift(manifest: dict[str, Any], base: Path, gates: Path | None = None)
         if nat != want:
             out.append(f"{spec}: native={nat!r} manifest[{mkey}]={want!r}")
     if gates is not None:
-        bound = set(drift.values())
+        bound = {v for v in drift.values() if isinstance(v, str)}
         out += [
             f"{k}: config-only threshold has no [drift] binding"
             for k in config_only_keys(load_profile(gates))
