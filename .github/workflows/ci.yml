@@ -85,10 +85,17 @@ jobs:
         run: |
           if git cat-file -e origin/master:scripts/gate_setup/manifest.py 2>/dev/null; then
             git archive origin/master scripts/gate_setup | tar -x -C "$RUNNER_TEMP"
-            PYTHONPATH="$RUNNER_TEMP/scripts" python -m gate_setup.manifest check-drift --file quality-gates.toml --profile .
+            # -P: do NOT prepend cwd (the PR working tree) to sys.path. Without it,
+            # `-m` puts cwd at sys.path[0] ahead of PYTHONPATH, so a PR that adds a
+            # ROOT-level ./gate_setup/ (unprotected by CODEOWNERS, which only covers
+            # /scripts/gate_setup/) would shadow master's check CODE and self-judge.
+            # -P affects module import only; --file/--profile read files relative to
+            # cwd ($GITHUB_WORKSPACE) as before, so the PR tree is still the DATA.
+            PYTHONPATH="$RUNNER_TEMP/scripts" python -P -m gate_setup.manifest check-drift --file quality-gates.toml --profile .
           else
             echo "note: origin/master has no scripts/gate_setup/ yet (bootstrap) — running PR copy"
-            PYTHONPATH=scripts python -m gate_setup.manifest check-drift --file quality-gates.toml --profile .
+            # -P drops cwd, so PYTHONPATH=scripts is required for the module to resolve.
+            PYTHONPATH="scripts" python -P -m gate_setup.manifest check-drift --file quality-gates.toml --profile .
           fi
 
       - name: Suppression diff (visibility only, non-blocking)
