@@ -63,3 +63,9 @@ def test_detect_polyglot():
 def test_detect_bare_packagejson_unsupported():
     d = detect(F / "lang_bare_pkg")
     assert d["language"] is None and d["candidates"] == []
+
+
+def test_detect_packagejson_not_object(tmp_path: Path):
+    (tmp_path / "package.json").write_text("[]")
+    d = detect(tmp_path)
+    assert d["language"] is None and d["candidates"] == []

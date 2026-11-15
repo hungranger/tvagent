@@ -23,7 +23,7 @@ def test_greenfield_l1_is_green_day_one(tmp_path: Path) -> None:
     """))
     # act: detection should see greenfield + no existing gates
     d = detect(tmp_path)
-    assert d["existing"]["ruff"] is False
+    assert d["python"]["existing"]["ruff"] is False
     # apply the strict greenfield gate block (simulates Phase 4 render for a clean repo)
     gates = (SKILL / "templates/pyproject.gates.toml").read_text()
     rendered = (gates.replace("{{COVERAGE_FLOOR}}", "92").replace("{{MAX_COMPLEXITY}}", "10")

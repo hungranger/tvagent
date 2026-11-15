@@ -106,11 +106,17 @@ def _is_react_ts(root: Path) -> bool:
     if (root / "tsconfig.json").exists():
         return True
     try:
-        data: dict[str, Any] = json.loads(pkg.read_text())
+        data: Any = json.loads(pkg.read_text())
     except json.JSONDecodeError:
         return False
-    deps: dict[str, Any] = {**data.get("dependencies", {}), **data.get("devDependencies", {})}
-    return any(k in deps for k in ("react", "next", "vite"))
+    if not isinstance(data, dict):
+        return False
+    deps: set[str] = set()
+    for key in ("dependencies", "devDependencies"):
+        section: Any = data.get(key)
+        if isinstance(section, dict):
+            deps |= set(section)
+    return bool(deps & {"react", "next", "vite"})
 
 
 def _python(root: Path) -> dict[str, Any]:

@@ -2,11 +2,26 @@
 
 `python <skill-dir>/scripts/gate_setup/detect.py <root>` (or `python
 <skill-dir>/scripts/gate_setup/detect.py .` from the target repo root) runs
-all four detectors and prints one JSON object. Invoke it by path, not `python
+all detectors and prints one JSON object. Invoke it by path, not `python
 -m gate_setup.detect` — the module isn't importable from a target repo that
 hasn't added the skill's `scripts/` to its `sys.path`.
 Every detector has a graceful, explicit fallback — never guess silently; if a
 key comes back `null`/empty, say so and ask the user rather than assuming.
+
+## Output shape
+
+`{language, candidates, git, <lang>: {pkg_manager, existing: {...}, ...}}`.
+`git` is top-level (language-neutral); the detectors below that are
+python-specific live under the `python` key (e.g. `python.pkg_manager`,
+`python.existing.ruff`).
+
+Language precedence (root-scan only): `Cargo.toml` -> rust; `go.mod` -> go;
+`package.json` + (`tsconfig.json` or a react/next/vite dependency) ->
+react-ts; `pyproject.toml` or `setup.py` -> python.
+
+- exactly one signal -> `language=<it>`, `candidates=[<it>]`
+- several signals -> `language=null`, `candidates=[...sorted...]` (ask the user)
+- none, or a bare `package.json` -> `language=null`, `candidates=[]`
 
 | Detector | JSON key(s) | Sniffs | Adapts | No-match fallback |
 |---|---|---|---|---|
@@ -36,6 +51,7 @@ Treat every `null` as a stop-and-ask, not a default:
 python <skill-dir>/scripts/gate_setup/detect.py .
 ```
 
-Output keys: `pkg_manager`, `audit_export`, `layout.{src_layout,
-core_candidates, packages}`, `existing.{ruff, pyright, coverage, precommit,
-ci}`, `git.{host, visibility, admin, gh_auth}`.
+Output keys: `language`, `candidates`, `git.{host, visibility, admin,
+gh_auth}`, and under `python`: `pkg_manager`, `audit_export`,
+`layout.{src_layout, core_candidates, packages}`, `existing.{ruff, pyright,
+coverage, precommit, ci}`.
