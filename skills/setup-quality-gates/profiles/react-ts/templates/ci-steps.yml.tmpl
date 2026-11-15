@@ -1,0 +1,7 @@
+# Gate steps to merge into the CI workflow.
+- run: npx biome ci .
+- run: npx tsc --noEmit
+- run: npx vitest run --coverage --coverage.thresholds.lines={{coverage_floor}}
+- run: npx knip
+- run: osv-scanner .
+# nightly: npx stryker run --thresholds.break {{mutation_floor}}
