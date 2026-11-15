@@ -1,32 +1,38 @@
 """Fail CI if any quality gate was weakened relative to origin/master.
 
-Direction-aware: coverage floor must not go down, ruff `select` must not lose
-a rule (mccabe max-complexity must not go up), vulture min_confidence must
-not go up (higher = noisier = weaker), pyright must stay strict and must not
-loosen reportMissing*/reportMissingTypeStubs toward "none", the mutation
-floor (nightly-mutation.yml's `--min`) must not go down, and no
-import-linter contract may be removed.
+Reads `quality-gates.toml` (working tree) against `git show
+origin/master:quality-gates.toml` and judges every key generically by its
+direction in `gate_setup.manifest.KEY_DIRECTIONS`:
 
-A gate whose config key is absent on master (no baseline to ratchet
-against) is skipped with a printed note -- absence isn't intent, and there
-is nothing to compare against. A gate that *was* present on master and is
-now missing from this tree is a HARD FAIL, not a skip: deletion is the
-strongest possible weakening (set-valued gates like ruff `select` and
-import-linter contracts catch this by construction -- an empty/shrunk set
-is already "weaker"; value-valued gates like `fail_under` check for it
-explicitly, since a missing value is not comparable by `<`/`>`).
+  scalar-up    must not go down      scalar-down  must not go up
+  enum         strictness index must not drop (STRICTNESS_ORDER)
+  set          must not shrink (lint_rules, protected.paths)
 
-stdlib only: tomllib for TOML, subprocess for `git show origin/master:...`.
+A key present on master but absent in this tree is a HARD FAIL (deletion is
+the strongest weakening). A key absent on master is new and allowed. No
+manifest on master (bootstrap) -> skipped with a note.
+
+stdlib only: tomllib for TOML, subprocess for `git show`.
 """
 
-import re
 import subprocess
 import sys
 import tomllib
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
+
+# The skill's scripts/ dir sits two levels above templates/scripts/ in the skill tree.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+from gate_setup.manifest import (  # pyright: ignore[reportMissingImports]
+    KEY_DIRECTIONS,
+    STRICTNESS_ORDER,
+    ManifestError,
+    load,
+    validate,
+)
 
 BASE_REF = "origin/master"
+MANIFEST = "quality-gates.toml"
 
 
 def git_show(ref: str, path: str) -> str | None:
@@ -36,161 +42,45 @@ def git_show(ref: str, path: str) -> str | None:
     return proc.stdout if proc.returncode == 0 else None
 
 
-def get(config: dict[str, Any], *keys: str) -> Any:
-    node: Any = config
-    for key in keys:
-        if not isinstance(node, dict) or key not in node:
-            return None
-        node = cast(Any, node[key])
-    return node
-
-
-# --- individual gate checks: (current, base) -> list[failure message] -----
-
-
-def check_coverage(current: dict[str, Any], base: dict[str, Any]) -> list[str]:
-    cur, old = (
-        get(current, "tool", "coverage", "report", "fail_under"),
-        get(base, "tool", "coverage", "report", "fail_under"),
-    )
-    if old is None:
-        return []  # no baseline in master -- new gate, nothing to ratchet against
-    if cur is None:
-        return [f"coverage fail_under was DELETED (was {old} in master)"]
-    if cur >= old:
-        return []
-    return [f"coverage fail_under lowered: {old} -> {cur}"]
-
-
-def check_ruff_select(current: dict[str, Any], base: dict[str, Any]) -> list[str]:
-    cur = set(get(current, "tool", "ruff", "lint", "select") or [])
-    cur |= set(get(current, "tool", "ruff", "lint", "extend-select") or [])
-    old = set(get(base, "tool", "ruff", "lint", "select") or [])
-    old |= set(get(base, "tool", "ruff", "lint", "extend-select") or [])
-    missing = old - cur
-    if not old or not missing:
-        return []
-    return [f"ruff select lost rule(s): {sorted(missing)}"]
-
-
-def check_mccabe(current: dict[str, Any], base: dict[str, Any]) -> list[str]:
-    cur, old = (
-        get(current, "tool", "ruff", "lint", "mccabe", "max-complexity"),
-        get(base, "tool", "ruff", "lint", "mccabe", "max-complexity"),
-    )
-    if old is None:
-        return []  # no baseline in master -- new gate, nothing to ratchet against
-    if cur is None:
-        return [f"mccabe max-complexity was DELETED (was {old} in master)"]
-    if cur <= old:
-        return []
-    return [f"mccabe max-complexity raised: {old} -> {cur}"]
-
-
-def check_vulture(current: dict[str, Any], base: dict[str, Any]) -> list[str]:
-    cur, old = (
-        get(current, "tool", "vulture", "min_confidence"),
-        get(base, "tool", "vulture", "min_confidence"),
-    )
-    if old is None:
-        return []  # no baseline in master -- new gate, nothing to ratchet against
-    if cur is None:
-        return [f"vulture min_confidence was DELETED (was {old} in master)"]
-    if cur <= old:
-        return []
-    return [f"vulture min_confidence raised (weaker, noisier floor is 60): {old} -> {cur}"]
-
-
-_STRICTNESS = {"error": 2, "warning": 1, "none": 0}
-
-
-def check_pyright(current: dict[str, Any], base: dict[str, Any]) -> list[str]:
-    failures: list[str] = []
-    cur_mode = get(current, "tool", "pyright", "typeCheckingMode")
-    if cur_mode != "strict":
-        failures.append(f"pyright typeCheckingMode no longer strict: {cur_mode!r}")
-    for key in ("reportMissingImports", "reportMissingModuleSource", "reportMissingTypeStubs"):
-        cur, old = get(current, "tool", "pyright", key), get(base, "tool", "pyright", key)
-        if old not in _STRICTNESS:
-            continue  # no baseline in master -- new gate, nothing to ratchet against
-        if cur not in _STRICTNESS:
-            failures.append(
-                f"pyright {key} was DELETED or set to an unrecognized value (was {old!r} in master)"
-            )
-        elif _STRICTNESS[cur] < _STRICTNESS[old]:
-            failures.append(f"pyright {key} loosened: {old!r} -> {cur!r}")
-    return failures
-
-
-def check_importlinter(current: dict[str, Any], base: dict[str, Any]) -> list[str]:
-    old_n = len(get(base, "tool", "importlinter", "contracts") or [])
-    cur_n = len(get(current, "tool", "importlinter", "contracts") or [])
-    if old_n == 0 or cur_n >= old_n:
-        return []
-    return [f"import-linter contract(s) removed: {old_n} -> {cur_n}"]
-
-
-PYPROJECT_CHECKS = [
-    check_coverage,
-    check_ruff_select,
-    check_mccabe,
-    check_vulture,
-    check_pyright,
-    check_importlinter,
-]
+def _flat(m: dict[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = dict(m.get("thresholds", {}))
+    if "paths" in m.get("protected", {}):
+        out["protected.paths"] = m["protected"]["paths"]
+    return out
 
 
 def run(current: dict[str, Any], base: dict[str, Any] | None) -> list[str]:
-    if base is None:
-        return []
+    cur, old = _flat(current), _flat(base or {})
     failures: list[str] = []
-    for check in PYPROJECT_CHECKS:
-        failures.extend(check(current, base))
+    for key, direction in KEY_DIRECTIONS.items():
+        if key not in old:
+            continue  # no baseline on master -- new gate, nothing to ratchet against
+        if key not in cur:
+            failures.append(f"{key} was DELETED (was {old[key]!r} on {BASE_REF})")
+            continue
+        c, o = cur[key], old[key]
+        if direction == "scalar-up" and c < o:
+            failures.append(f"{key} lowered: {o} -> {c}")
+        elif direction == "scalar-down" and c > o:
+            failures.append(f"{key} raised: {o} -> {c}")
+        elif direction == "enum" and STRICTNESS_ORDER.index(c) < STRICTNESS_ORDER.index(o):
+            failures.append(f"{key} downgraded: {o} -> {c}")
+        elif direction == "set" and not set(o) <= set(c):
+            failures.append(f"{key} lost entries: {sorted(set(o) - set(c))}")
     return failures
 
 
-MIN_RE = re.compile(r"--min[= ](\d+(?:\.\d+)?)")
-
-
-def check_mutation_floor(current_text: str, base_text: str | None) -> list[str]:
-    if base_text is None:
-        return []
-    old_match = MIN_RE.search(base_text)
-    if not old_match:
-        return []  # no baseline in master -- new gate, nothing to ratchet against
-    old = float(old_match.group(1))
-    cur_match = MIN_RE.search(current_text)
-    if not cur_match:
-        return [f"mutation floor (--min) was DELETED (was {old} in master)"]
-    cur = float(cur_match.group(1))
-    if cur >= old:
-        return []
-    return [f"mutation floor lowered: {old} -> {cur}"]
-
-
 def main() -> int:
-    current = tomllib.loads(Path("pyproject.toml").read_text())
-
-    base_pyproject_text = git_show(BASE_REF, "pyproject.toml")
-    if base_pyproject_text is None:
-        print(f"note: {BASE_REF}:pyproject.toml not found -- skipping pyproject-based gate checks")
-        base = None
-    else:
-        base = tomllib.loads(base_pyproject_text)
-
+    try:
+        current = load(Path(MANIFEST))
+        base_text = git_show(BASE_REF, MANIFEST)
+        base = validate(tomllib.loads(base_text)) if base_text and base_text.strip() else None
+    except (ManifestError, tomllib.TOMLDecodeError) as e:
+        print(f"GATE RATCHET FAILED -- unreadable manifest: {e}")
+        return 1
+    if base is None:
+        print(f"note: {BASE_REF}:{MANIFEST} not found or empty -- skipping ratchet (bootstrap)")
     failures = run(current, base)
-
-    nightly_path = Path(".github/workflows/nightly-mutation.yml")
-    current_nightly = nightly_path.read_text() if nightly_path.exists() else ""
-    base_nightly = git_show(BASE_REF, ".github/workflows/nightly-mutation.yml")
-    if base_nightly is None:
-        print(
-            f"note: {BASE_REF}:.github/workflows/nightly-mutation.yml not found -- "
-            "skipping mutation-floor check"
-        )
-    else:
-        failures.extend(check_mutation_floor(current_nightly, base_nightly))
-
     if failures:
         print("GATE RATCHET FAILED -- gate(s) weakened relative to origin/master:")
         for f in failures:
@@ -201,44 +91,38 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    # Self-check: two fake config dicts, one weakened -> must fail.
-    _base = {
-        "tool": {
-            "coverage": {"report": {"fail_under": 92}},
-            "ruff": {"lint": {"select": ["E", "F"], "mccabe": {"max-complexity": 10}}},
-            "vulture": {"min_confidence": 60},
-            "pyright": {"typeCheckingMode": "strict", "reportMissingImports": "warning"},
-            "importlinter": {"contracts": [{"name": "a"}, {"name": "b"}]},
-        }
+    _base: dict[str, Any] = {
+        "thresholds": {
+            "coverage_floor": 90,
+            "complexity_max": 10,
+            "type_strictness": "strict",
+            "lint_rules": ["E", "C901"],
+            "mutation_floor": 70,
+        },
+        "protected": {"paths": [".github/**", "a"]},
     }
     assert run(_base, _base) == []
-
-    _weakened = {
-        "tool": {
-            "coverage": {"report": {"fail_under": 50}},  # lowered
-            # rule dropped + complexity raised
-            "ruff": {"lint": {"select": ["E"], "mccabe": {"max-complexity": 20}}},
-            "vulture": {"min_confidence": 90},  # raised (weaker)
-            "pyright": {"typeCheckingMode": "basic", "reportMissingImports": "none"},  # loosened
-            "importlinter": {"contracts": [{"name": "a"}]},  # one removed
-        }
+    assert run(_base, None) == []  # bootstrap
+    _weak: dict[str, Any] = {
+        "thresholds": {
+            "coverage_floor": 50,
+            "complexity_max": 20,
+            "type_strictness": "standard",
+            "lint_rules": ["E"],
+        },
+        "protected": {"paths": ["a"]},
     }
-    _weakened_failures = run(_weakened, _base)
-    assert len(_weakened_failures) >= 6, _weakened_failures
-    assert check_mutation_floor(
-        "run: python scripts/mutation_score.py --min 50",
-        "run: python scripts/mutation_score.py --min 90",
-    )
-
-    # Deletion case: master HAS the gate, the PR removes the whole table/key --
-    # must FAIL, not skip (this is the bug this fix-round closed).
-    _deleted: dict[str, Any] = {"tool": {}}
-    _deleted_failures = run(_deleted, _base)
-    assert len(_deleted_failures) >= 3, _deleted_failures  # coverage, mccabe, vulture at least
-    assert any("DELETED" in f for f in _deleted_failures), _deleted_failures
-    assert check_mutation_floor(
-        "run: python scripts/mutation_score.py",  # --min flag removed
-        "run: python scripts/mutation_score.py --min 90",
-    )
-
-    sys.exit(main())
+    _f = run(_weak, _base)
+    assert len(_f) == 6, _f  # noqa: PLR2004  # 4 weakened + mutation_floor DELETED + paths shrunk
+    assert any("DELETED" in x for x in _f), _f
+    assert (
+        run(
+            {
+                "thresholds": {**_base["thresholds"], "vulture_confidence": 60},
+                "protected": _base["protected"],
+            },
+            _base,
+        )
+        == []
+    )  # new key allowed
+    sys.exit(0 if "--self-check" in sys.argv else main())
