@@ -89,3 +89,25 @@ def test_broken_override_json_keeps_defaults(tmp_path: Path):
     (tmp_path / ".claude").mkdir()
     (tmp_path / ".claude" / "protected-paths.json").write_text("{not json")
     assert _asks(tmp_path, "Cargo.toml")
+
+
+def test_dotdot_root_package_json_asks(tmp_path: Path):
+    assert _asks(tmp_path, "sub/../package.json")
+
+
+def test_dotdot_gate_setup_asks(tmp_path: Path):
+    assert _asks(tmp_path, "scripts/../scripts/gate_setup/manifest.py")
+
+
+def test_bash_write_to_glob_protected_dir_asks(tmp_path: Path):
+    (tmp_path / "quality-gates.toml").write_text('[protected]\npaths = ["infra/**"]\n')
+    payload = {"tool_name": "Bash", "tool_input": {"command": "echo x > infra/main.tf"}}
+    p = subprocess.run(
+        [sys.executable, str(SCRIPT)],
+        input=json.dumps(payload),
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert '"ask"' in p.stdout

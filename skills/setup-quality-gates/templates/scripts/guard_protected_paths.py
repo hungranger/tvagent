@@ -137,16 +137,17 @@ def _matches(rel: PurePosixPath, pattern: str) -> bool:
 
 
 def _relative(file_path: str) -> PurePosixPath:
-    p = PurePosixPath(file_path)
+    """Repo-relative path with `..`/symlinks collapsed; outside the repo -> absolute path."""
+    resolved = (Path.cwd() / file_path).resolve()
     try:
-        return p.relative_to(PurePosixPath(Path.cwd().as_posix()))
+        return PurePosixPath(resolved.relative_to(Path.cwd().resolve()).as_posix())
     except ValueError:
-        return p
+        return PurePosixPath(resolved.as_posix())
 
 
 def _is_protected_path(file_path: str, basenames: set[str], patterns: list[str]) -> bool:
     rel = _relative(file_path)
-    parts = PurePosixPath(file_path).parts
+    parts = rel.parts
     if rel.name in basenames or (rel.name in ROOT_ONLY and len(rel.parts) == 1):
         return True
     if any(_has_run(parts, d) for d in PROTECTED_DIRS):
@@ -161,12 +162,19 @@ def _protected_tokens(basenames: set[str]) -> list[str]:
     return [*basenames, *ROOT_ONLY, *dirs, ".claude/settings.json", ".claude/settings.local.json"]
 
 
-# Manifest GLOB patterns (dir/**, *.tf) are NOT matched in Bash commands: substring/best-effort
-# by design; the server-side ratchet is the real gate.
-def _bash_touches_protected(command: str, basenames: set[str]) -> bool:
+# Manifest globs match in Bash only via their longest literal chunk (best-effort heuristic;
+# the server-side ratchet is the real gate).
+def _glob_literals(patterns: list[str]) -> set[str]:
+    """Longest literal chunk of each glob (infra/** -> infra/, *.tf -> .tf); heuristic."""
+    chunks = (max(re.split(r"[*?\[\]]+", p), key=len) for p in patterns)
+    return {c for c in chunks if c}
+
+
+def _bash_touches_protected(command: str, basenames: set[str], patterns: list[str]) -> bool:
     if not _WRITE_INDICATORS.search(command):
         return False
-    return any(token in command for token in _protected_tokens(basenames))
+    tokens = [*_protected_tokens(basenames), *_glob_literals(patterns)]
+    return any(token in command for token in tokens)
 
 
 def _bash_bypasses_gate(command: str) -> str | None:
@@ -202,7 +210,7 @@ def _decision(payload: dict[str, object]) -> str | None:
     elif tool_name == "Bash":
         command = tool_input.get("command")
         if isinstance(command, str):
-            if _bash_touches_protected(command, basenames | set(patterns)):
+            if _bash_touches_protected(command, basenames, patterns):
                 return (
                     f"Protected gate/config file touched by: {command}. "
                     "A human must approve edits to quality-gate infrastructure."
