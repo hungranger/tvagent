@@ -63,11 +63,18 @@ language-agnostic (no tool names in the code — only in profile/manifest data):
   intentional floor bump.
 - `<file>~<regex>` — the one capture group of a regex, coerced to the manifest
   value's type, must `==` it, and the regex must match **exactly once** (0 or
-  >1 matches = drift, so a decoy line can't mask a lowered real value). This
-  reproduces the old nightly-mutation `--min` floor generically, since the
-  nightly YAML isn't TOML/JSON and the dotted-key parser can't read it. The
-  binding stays line-anchored (`(?m)^...$`) against the literal `--min <N>`
-  kept in `nightly-mutation.yml`.
+  >1 matches = drift, so a same-shape decoy line can't mask a lowered real
+  value). This reproduces the old nightly-mutation `--min` floor generically,
+  since the nightly YAML isn't TOML/JSON and the dotted-key parser can't read
+  it. The binding stays line-anchored (`(?m)^...$`) against the literal
+  `--min <N>` kept in `nightly-mutation.yml`.
+  The exactly-once defense only covers *same-shape* duplicate lines: a
+  shape-changing edit the regex can't read (`--min=50`, or a multi-line
+  `run: |` block) could dodge the binding while a same-value decoy keeps the
+  match count at one. That residual leans on the server side — the workflow
+  file lives under `.github/**`, which is in `[protected].paths`, so the guard
+  hook asks and CODEOWNERS gates any shape-changing edit. The regex binding is
+  the drift-level backstop for value edits, not the sole gate.
 
 **Deliberately narrower than the old pyright sub-key check (F1(b)).** The old
 `pyproject.toml`-based ratchet also blocked loosening pyright's
