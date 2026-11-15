@@ -83,3 +83,9 @@ def test_manifest_omitting_default_cannot_shrink(tmp_path: Path):
 def test_broken_manifest_keeps_defaults(tmp_path: Path):
     (tmp_path / "quality-gates.toml").write_text("not = [valid")
     assert _asks(tmp_path, "go.mod")
+
+
+def test_broken_override_json_keeps_defaults(tmp_path: Path):
+    (tmp_path / ".claude").mkdir()
+    (tmp_path / ".claude" / "protected-paths.json").write_text("{not json")
+    assert _asks(tmp_path, "Cargo.toml")

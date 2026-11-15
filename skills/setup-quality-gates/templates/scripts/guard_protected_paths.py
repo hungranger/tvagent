@@ -97,13 +97,19 @@ _PUSH_PROTECTED_REF = re.compile(r"(?:^|[\s:])(?:master|main)(?:\s|$)")
 
 
 def _extra_basenames() -> set[str]:
-    """Merge in .claude/protected-paths.json (a JSON list) if present."""
-    if not OVERRIDE_FILE.exists():
+    """Merge in .claude/protected-paths.json (a JSON list) if present.
+
+    Any problem -> empty set: a bad override must degrade to "defaults still apply".
+    """
+    try:
+        if not OVERRIDE_FILE.exists():
+            return set()
+        raw: object = json.loads(OVERRIDE_FILE.read_text())
+        if not isinstance(raw, list):
+            return set()
+        return {PurePosixPath(str(entry)).name for entry in cast("list[object]", raw)}
+    except Exception:
         return set()
-    raw: object = json.loads(OVERRIDE_FILE.read_text())
-    if not isinstance(raw, list):
-        return set()
-    return {PurePosixPath(str(entry)).name for entry in cast("list[object]", raw)}
 
 
 def _manifest_patterns() -> list[str]:
@@ -155,6 +161,8 @@ def _protected_tokens(basenames: set[str]) -> list[str]:
     return [*basenames, *ROOT_ONLY, *dirs, ".claude/settings.json", ".claude/settings.local.json"]
 
 
+# Manifest GLOB patterns (dir/**, *.tf) are NOT matched in Bash commands: substring/best-effort
+# by design; the server-side ratchet is the real gate.
 def _bash_touches_protected(command: str, basenames: set[str]) -> bool:
     if not _WRITE_INDICATORS.search(command):
         return False
