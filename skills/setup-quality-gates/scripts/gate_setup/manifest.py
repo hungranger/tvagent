@@ -32,6 +32,9 @@ _TYPES: dict[str, type] = {
 }
 
 
+_TOP_LEVEL = {"meta", "thresholds", "protected", "drift"}
+
+
 class ManifestError(Exception):
     pass
 
@@ -55,8 +58,11 @@ def _check(key: str, val: Any) -> None:
 
 
 def validate(m: dict[str, Any]) -> dict[str, Any]:
+    extra = set(m) - _TOP_LEVEL
+    if extra:
+        raise ManifestError(f"unknown top-level table: {sorted(extra)}")
     lang = _table(m, "meta").get("language")
-    if lang is not None and lang not in LANGUAGES:
+    if lang is not None and not (isinstance(lang, str) and lang in LANGUAGES):
         raise ManifestError(f"meta.language: {lang!r} not in {sorted(LANGUAGES)}")
     for k, v in _table(m, "thresholds").items():
         if k not in _TYPES or k == "protected.paths":
@@ -78,9 +84,9 @@ def load(path: Path) -> dict[str, Any]:
 
 
 def _lookup(m: dict[str, Any], key: str) -> Any:
-    if key not in KEY_DIRECTIONS:
-        raise KeyError(key)
     table, _, name = key.rpartition(".")
+    if key not in KEY_DIRECTIONS or name not in _table(m, table or "thresholds"):
+        raise ManifestError(f"missing key: {key}")
     return _table(m, table or "thresholds")[name]
 
 

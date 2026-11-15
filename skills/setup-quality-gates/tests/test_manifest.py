@@ -70,3 +70,19 @@ def test_check_drift(tmp_path: Path):
     assert _cli(tmp_path, "check-drift", "--profile", ".").returncode == 0
     (tmp_path / "quality-gates.toml").write_text(base % 80)
     assert _cli(tmp_path, "check-drift", "--profile", ".").returncode == 1
+
+
+def test_unknown_top_level_table_rejected(tmp_path: Path):
+    with pytest.raises(ManifestError):
+        _load(tmp_path, "[threshold]\ncoverage_floor = 80\n")
+
+
+def test_nonstring_language_rejected(tmp_path: Path):
+    with pytest.raises(ManifestError):
+        _load(tmp_path, '[meta]\nlanguage = ["x"]\n')
+
+
+def test_missing_key_message_clear(tmp_path: Path):
+    (tmp_path / "quality-gates.toml").write_text("[thresholds]\ncoverage_floor = 80\n")
+    r = _cli(tmp_path, "get", "complexity_max")
+    assert r.returncode == NOT_FOUND and "missing key: complexity_max" in r.stderr
