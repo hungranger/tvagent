@@ -1,0 +1,43 @@
+# tvagent's own quality gates (dogfood of skills/setup-quality-gates).
+# Single source of truth for the ratchet (scripts/gate_ratchet.py) and the
+# drift check (scripts/gate_setup/manifest.py check-drift). Values here equal
+# today's native config in pyproject.toml / nightly-mutation.yml, so the first
+# post-migration ratchet baseline == today's gates. Protected: editing this
+# file is how thresholds get weakened — CODEOWNER review required.
+
+[meta]
+language = "python"
+
+[thresholds]
+coverage_floor = 92            # [tool.coverage.report] fail_under
+complexity_max = 10            # [tool.ruff.lint.mccabe] max-complexity
+mutation_floor = 90            # nightly-mutation.yml: mutation_score.py --min 90
+vulture_confidence = 60        # [tool.vulture] min_confidence
+arch_contracts_min = 3         # [tool.importlinter] contract count
+type_strictness = "strict"     # [tool.pyright] typeCheckingMode
+lint_rules = ["E", "F", "I", "UP", "B", "SIM", "PL", "RUF", "N", "C4", "C901", "PTH"]
+
+[protected]
+paths = [
+    ".github/**",
+    "pyproject.toml",
+    ".pre-commit-config.yaml",
+    "CODEOWNERS",
+    ".gitleaks.toml",
+    ".vulture_allowlist.py",
+    "uv.lock",
+    "quality-gates.toml",
+    "scripts/gate_ratchet.py",
+    "scripts/suppression_diff.py",
+    "scripts/mutation_score.py",
+    "scripts/guard_protected_paths.py",
+    "scripts/gate_setup/**",
+]
+
+# native value must equal the manifest value (manifest.py check-drift).
+[drift]
+"pyproject.toml#tool.coverage.report.fail_under" = "coverage_floor"
+"pyproject.toml#tool.ruff.lint.mccabe.max-complexity" = "complexity_max"
+"pyproject.toml#tool.ruff.lint.select" = "lint_rules"
+"pyproject.toml#tool.pyright.typeCheckingMode" = "type_strictness"
+"pyproject.toml#tool.vulture.min_confidence" = "vulture_confidence"

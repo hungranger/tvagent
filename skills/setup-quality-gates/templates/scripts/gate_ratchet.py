@@ -21,8 +21,13 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
-# The skill's scripts/ dir sits two levels above templates/scripts/ in the skill tree.
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+# Resolve `gate_setup`: when run as `python scripts/gate_ratchet.py` the script's
+# own dir (which holds gate_setup/ in an installed repo) is already sys.path[0],
+# so we only APPEND a fallback — never insert ahead of it. The fallback points at
+# the skill tree's scripts/ (two levels above templates/scripts/), used when this
+# file runs from the skill tree itself. Appending (not inserting) also means a
+# stray sibling `scripts/` can never shadow the installed gate_setup.
+sys.path.append(str(Path(__file__).resolve().parents[2] / "scripts"))
 from gate_setup.manifest import (  # pyright: ignore[reportMissingImports]
     KEY_DIRECTIONS,
     STRICTNESS_ORDER,
@@ -113,7 +118,7 @@ if __name__ == "__main__":
         "protected": {"paths": ["a"]},
     }
     _f = run(_weak, _base)
-    assert len(_f) == 6, _f  # noqa: PLR2004  # 4 weakened + mutation_floor DELETED + paths shrunk
+    assert len(_f) == 6, _f  # 4 weakened + mutation_floor DELETED + paths shrunk
     assert any("DELETED" in x for x in _f), _f
     assert (
         run(

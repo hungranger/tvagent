@@ -18,9 +18,12 @@ is the real boundary.
 
 from __future__ import annotations
 
+import fnmatch
 import json
+import os
 import re
 import sys
+import tomllib
 from pathlib import Path, PurePosixPath
 from typing import cast
 
@@ -33,6 +36,21 @@ PROTECTED_BASENAMES: set[str] = {
     ".gitleaks.toml",
     ".vulture_allowlist.py",
     "uv.lock",
+    # rust
+    "Cargo.toml",
+    "Cargo.lock",
+    "clippy.toml",
+    # go
+    "go.mod",
+    "go.sum",
+    # react-ts (package.json is root-only, see ROOT_ONLY)
+    "tsconfig.json",
+    "biome.json",
+    "package-lock.json",
+    "pnpm-lock.yaml",
+    "yarn.lock",
+    # the manifest itself: editing it is how thresholds get weakened
+    "quality-gates.toml",
     "gate_ratchet.py",
     "suppression_diff.py",
     "mutation_score.py",
@@ -46,8 +64,15 @@ PROTECTED_SUFFIXES: tuple[tuple[str, ...], ...] = (
     (".claude", "settings.local.json"),
 )
 
-# Any path with a .github/ component (workflows, CODEOWNERS, dependabot, ...).
-GITHUB_DIR = ".github"
+# Protected only at the repo root (package.json churn is high; nested ones are not gates).
+ROOT_ONLY: frozenset[str] = frozenset({"package.json"})
+
+# Any path containing this contiguous component run (.github: workflows, CODEOWNERS, ...;
+# scripts/gate_setup: the spine package -- editing manifest.py neuters the ratchet registry).
+PROTECTED_DIRS: tuple[tuple[str, ...], ...] = ((".github",), ("scripts", "gate_setup"))
+
+# Repo manifest: its [protected].paths are unioned in (never replace the defaults).
+MANIFEST_FILE = Path("quality-gates.toml")
 
 # Optional repo-local extension: a JSON list of extra protected paths/names.
 OVERRIDE_FILE = Path(".claude/protected-paths.json")
@@ -73,32 +98,99 @@ _PUSH_PROTECTED_REF = re.compile(r"(?:^|[\s:])(?:master|main)(?:\s|$)")
 
 
 def _extra_basenames() -> set[str]:
-    """Merge in .claude/protected-paths.json (a JSON list) if present."""
-    if not OVERRIDE_FILE.exists():
+    """Merge in .claude/protected-paths.json (a JSON list) if present.
+
+    Any problem -> empty set: a bad override must degrade to "defaults still apply".
+    """
+    try:
+        if not OVERRIDE_FILE.exists():
+            return set()
+        raw: object = json.loads(OVERRIDE_FILE.read_text())
+        if not isinstance(raw, list):
+            return set()
+        return {PurePosixPath(str(entry)).name for entry in cast("list[object]", raw)}
+    except Exception:
         return set()
-    raw: object = json.loads(OVERRIDE_FILE.read_text())
-    if not isinstance(raw, list):
-        return set()
-    return {PurePosixPath(str(entry)).name for entry in cast("list[object]", raw)}
 
 
-def _is_protected_path(file_path: str, basenames: set[str]) -> bool:
-    parts = PurePosixPath(file_path).parts
-    if PurePosixPath(file_path).name in basenames:
+def _manifest_patterns() -> list[str]:
+    """[protected].paths from quality-gates.toml; any problem -> [] (defaults still apply)."""
+    try:
+        data: object = tomllib.loads(MANIFEST_FILE.read_text())
+        prot: object = cast("dict[str, object]", data).get("protected")
+        paths: object = cast("dict[str, object]", prot).get("paths")
+        return [p for p in cast("list[object]", paths) if isinstance(p, str)]
+    except Exception:
+        return []
+
+
+def _has_run(parts: tuple[str, ...], run: tuple[str, ...]) -> bool:
+    n = len(run)
+    return any(parts[i : i + n] == run for i in range(len(parts) - n + 1))
+
+
+def _matches(rel: PurePosixPath, pattern: str) -> bool:
+    if pattern.endswith("/**"):
+        return _has_run(rel.parts[:-1], PurePosixPath(pattern[:-3]).parts)
+    return fnmatch.fnmatchcase(rel.as_posix(), pattern) or (
+        "/" not in pattern and rel.name == pattern
+    )
+
+
+def _rel_to_repo(p: Path) -> PurePosixPath:
+    try:
+        return PurePosixPath(p.relative_to(Path.cwd().resolve()).as_posix())
+    except ValueError:
+        return PurePosixPath(p.as_posix())  # outside repo: absolute (name/dir checks still apply)
+
+
+def _candidates(file_path: str) -> list[PurePosixPath]:
+    """Lexical (`..` collapsed, symlinks kept) + resolved path; protected if either hits."""
+    cwd = Path.cwd().resolve()
+    try:
+        # lexical: `..` collapsed TEXTUALLY, symlinks NOT followed (catches plain-`..`).
+        lexical = Path(os.path.normpath(cwd / file_path))
+        # resolved: TRUE OS order — symlinks first, THEN `..` (catches symlink + symlink/..).
+        # NOT lexical.resolve(): normpath already collapsed `..`, hiding the symlink.
+        resolved = (cwd / file_path).resolve()
+        return [_rel_to_repo(lexical), _rel_to_repo(resolved)]
+    except Exception:  # e.g. embedded NUL: never silently allow
+        return [PurePosixPath(file_path)]
+
+
+def _rel_protected(rel: PurePosixPath, basenames: set[str], patterns: list[str]) -> bool:
+    parts = rel.parts
+    if rel.name in basenames or (rel.name in ROOT_ONLY and len(parts) == 1):
         return True
-    if GITHUB_DIR in parts:
+    if any(_has_run(parts, d) for d in PROTECTED_DIRS):
         return True
-    return any(parts[-len(sfx) :] == sfx for sfx in PROTECTED_SUFFIXES if len(parts) >= len(sfx))
+    if any(parts[-len(sfx) :] == sfx for sfx in PROTECTED_SUFFIXES if len(parts) >= len(sfx)):
+        return True
+    return any(_matches(rel, pat) for pat in patterns)
+
+
+def _is_protected_path(file_path: str, basenames: set[str], patterns: list[str]) -> bool:
+    return any(_rel_protected(r, basenames, patterns) for r in _candidates(file_path))
 
 
 def _protected_tokens(basenames: set[str]) -> list[str]:
-    return [*basenames, GITHUB_DIR + "/", ".claude/settings.json", ".claude/settings.local.json"]
+    dirs = ["/".join(d) + "/" for d in PROTECTED_DIRS]
+    return [*basenames, *ROOT_ONLY, *dirs, ".claude/settings.json", ".claude/settings.local.json"]
 
 
-def _bash_touches_protected(command: str, basenames: set[str]) -> bool:
+# Manifest globs match in Bash only via their longest literal chunk (best-effort heuristic;
+# the server-side ratchet is the real gate).
+def _glob_literals(patterns: list[str]) -> set[str]:
+    """Longest literal chunk of each glob (infra/** -> infra/, *.tf -> .tf); heuristic."""
+    chunks = (max(re.split(r"[*?\[\]]+", p), key=len) for p in patterns)
+    return {c for c in chunks if c}
+
+
+def _bash_touches_protected(command: str, basenames: set[str], patterns: list[str]) -> bool:
     if not _WRITE_INDICATORS.search(command):
         return False
-    return any(token in command for token in _protected_tokens(basenames))
+    tokens = [*_protected_tokens(basenames), *_glob_literals(patterns)]
+    return any(token in command for token in tokens)
 
 
 def _bash_bypasses_gate(command: str) -> str | None:
@@ -122,10 +214,11 @@ def _decision(payload: dict[str, object]) -> str | None:
         return None
     tool_input = cast("dict[str, object]", raw_input)
     basenames = PROTECTED_BASENAMES | _extra_basenames()
+    patterns = _manifest_patterns()
 
     if tool_name in {"Edit", "Write", "MultiEdit"}:
         file_path = tool_input.get("file_path")
-        if isinstance(file_path, str) and _is_protected_path(file_path, basenames):
+        if isinstance(file_path, str) and _is_protected_path(file_path, basenames, patterns):
             return (
                 f"Protected gate/config file: {file_path}. "
                 "A human must approve edits to quality-gate infrastructure."
@@ -133,7 +226,7 @@ def _decision(payload: dict[str, object]) -> str | None:
     elif tool_name == "Bash":
         command = tool_input.get("command")
         if isinstance(command, str):
-            if _bash_touches_protected(command, basenames):
+            if _bash_touches_protected(command, basenames, patterns):
                 return (
                     f"Protected gate/config file touched by: {command}. "
                     "A human must approve edits to quality-gate infrastructure."

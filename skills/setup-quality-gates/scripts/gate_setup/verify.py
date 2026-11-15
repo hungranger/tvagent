@@ -42,8 +42,9 @@ def prove_ratchet_bites(root: Path) -> bool:
         work = Path(td) / "work"
         (work / "scripts").mkdir(parents=True)
         shutil.copy(ratchet_src, work / "scripts" / "gate_ratchet.py")
-        shutil.copytree(pkg_src, work / "scripts" / "gate_setup",
-                        ignore=shutil.ignore_patterns("__pycache__"))
+        shutil.copytree(
+            pkg_src, work / "scripts" / "gate_setup", ignore=shutil.ignore_patterns("__pycache__")
+        )
         (work / "quality-gates.toml").write_text(original)
 
         _git("init", "-q", cwd=work)
@@ -55,7 +56,11 @@ def prove_ratchet_bites(root: Path) -> bool:
         env = {**os.environ, "PYTHONPATH": str(work / "scripts")}
         result = subprocess.run(
             [sys.executable, str(work / "scripts" / "gate_ratchet.py")],
-            cwd=work, capture_output=True, text=True, check=False, env=env,
+            cwd=work,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=env,
         )
         # Require the ratchet's own failure message so a crash (ImportError) is not a "bite".
         return result.returncode != 0 and "coverage_floor lowered" in result.stdout

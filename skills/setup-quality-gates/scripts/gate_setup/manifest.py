@@ -7,7 +7,7 @@ import json
 import sys
 import tomllib
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 KEY_DIRECTIONS: dict[str, str] = {
     "coverage_floor": "scalar-up",
@@ -129,7 +129,7 @@ def _native(spec: str, base: Path) -> Any:
         if not isinstance(v, dict) or part not in v:
             raise KeyError(part)
         v = v[part]  # pyright: ignore[reportUnknownVariableType]
-    return v
+    return cast("Any", v)
 
 
 def check_drift(manifest: dict[str, Any], base: Path, gates: Path | None = None) -> list[str]:

@@ -28,9 +28,12 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.tool != "mutmut":
-        # Other tools: --stats-file holds the captured raw output; adapters live in the skill.
-        sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
-        from gate_setup.mutation_adapters import score as tool_score  # pyright: ignore
+        # Other tools: --stats-file holds the captured raw output; adapters live
+        # in gate_setup. Append a skill-tree fallback (the installed script dir is
+        # already sys.path[0], so it is never shadowed); import lazily since only
+        # non-mutmut tools need it.
+        sys.path.append(str(Path(__file__).resolve().parents[2] / "scripts"))
+        from gate_setup.mutation_adapters import score as tool_score  # noqa: PLC0415
 
         pct = tool_score(args.tool, args.stats_file.read_text())
         print(f"mutation score: {pct}% ({args.tool})")

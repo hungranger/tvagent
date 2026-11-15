@@ -5,7 +5,7 @@ import subprocess
 import sys
 import tomllib
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 _AUDIT: dict[str, str] = {
     "uv": "uv export --no-hashes --all-extras",
@@ -111,11 +111,12 @@ def _is_react_ts(root: Path) -> bool:
         return False
     if not isinstance(data, dict):
         return False
+    obj = cast("dict[str, Any]", data)
     deps: set[str] = set()
     for key in ("dependencies", "devDependencies"):
-        section: Any = data.get(key)
+        section = obj.get(key)
         if isinstance(section, dict):
-            deps |= set(section)
+            deps |= set(cast("dict[str, Any]", section))
     return bool(deps & {"react", "next", "vite"})
 
 
