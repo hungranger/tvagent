@@ -159,14 +159,25 @@ def _candidates(file_path: str) -> list[PurePosixPath]:
 
 
 def _rel_protected(rel: PurePosixPath, basenames: set[str], patterns: list[str]) -> bool:
-    parts = rel.parts
-    if rel.name in basenames or (rel.name in ROOT_ONLY and len(parts) == 1):
+    # macOS/Windows filesystems are case-INSENSITIVE, so `.GITHUB/workflows/ci.yml`
+    # or `PyProject.TOML` reach the real protected files. Compare case-folded on
+    # BOTH sides (path parts AND the protected tokens/patterns) so case can't evade.
+    parts = tuple(p.casefold() for p in rel.parts)
+    name = rel.name.casefold()
+    if name in {b.casefold() for b in basenames} or (
+        name in {r.casefold() for r in ROOT_ONLY} and len(parts) == 1
+    ):
         return True
-    if any(_has_run(parts, d) for d in PROTECTED_DIRS):
+    if any(_has_run(parts, tuple(x.casefold() for x in d)) for d in PROTECTED_DIRS):
         return True
-    if any(parts[-len(sfx) :] == sfx for sfx in PROTECTED_SUFFIXES if len(parts) >= len(sfx)):
+    if any(
+        parts[-len(sfx) :] == tuple(x.casefold() for x in sfx)
+        for sfx in PROTECTED_SUFFIXES
+        if len(parts) >= len(sfx)
+    ):
         return True
-    return any(_matches(rel, pat) for pat in patterns)
+    rel_cf = PurePosixPath(rel.as_posix().casefold())
+    return any(_matches(rel_cf, pat.casefold()) for pat in patterns)
 
 
 def _is_protected_path(file_path: str, basenames: set[str], patterns: list[str]) -> bool:
@@ -189,8 +200,9 @@ def _glob_literals(patterns: list[str]) -> set[str]:
 def _bash_touches_protected(command: str, basenames: set[str], patterns: list[str]) -> bool:
     if not _WRITE_INDICATORS.search(command):
         return False
+    cmd = command.casefold()  # case-insensitive FS: `>> .GITHUB/...` must still match
     tokens = [*_protected_tokens(basenames), *_glob_literals(patterns)]
-    return any(token in command for token in tokens)
+    return any(token.casefold() in cmd for token in tokens)
 
 
 def _bash_bypasses_gate(command: str) -> str | None:

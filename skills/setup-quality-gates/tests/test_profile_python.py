@@ -34,6 +34,10 @@ def test_python_profile_renders():
     assert "max-complexity = 10" in gates
     assert "min_confidence = 60" in gates
     assert 'typeCheckingMode = "strict"' in gates
+    # The rendered ruff select must parse back to a real TOML list (not a
+    # \n-joined string), equal to tvagent's set.
+    parsed = tomllib.loads(gates)
+    assert parsed["tool"]["ruff"]["lint"]["select"] == TVAGENT_M["thresholds"]["lint_rules"]
 
 
 def test_python_rust_native_first():

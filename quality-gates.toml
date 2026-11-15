@@ -13,7 +13,10 @@ coverage_floor = 92            # [tool.coverage.report] fail_under
 complexity_max = 10            # [tool.ruff.lint.mccabe] max-complexity
 mutation_floor = 90            # nightly-mutation.yml: mutation_score.py --min 90
 vulture_confidence = 60        # [tool.vulture] min_confidence
-arch_contracts_min = 3         # [tool.importlinter] contract count
+arch_contracts_min = 3         # [tool.importlinter] contract count (3 contracts today).
+# NOTE: mechanism="none" -- the ratchet floors this NUMBER vs master, but nothing
+# yet asserts pyproject.toml actually has >= this many contracts (no counter gate).
+# CODEOWNERS on pyproject.toml is the backstop for contract deletion until then.
 type_strictness = "strict"     # [tool.pyright] typeCheckingMode
 lint_rules = ["E", "F", "I", "UP", "B", "SIM", "PL", "RUF", "N", "C4", "C901", "PTH"]
 

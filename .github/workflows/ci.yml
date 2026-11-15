@@ -66,6 +66,31 @@ jobs:
             python scripts/gate_ratchet.py
           fi
 
+      - name: Gate drift (native config must equal the manifest)
+        # The ratchet guards quality-gates.toml, but the ACTUAL thresholds live in
+        # pyproject.toml. This BLOCKING step fails if any [drift]-bound native value
+        # (e.g. pyproject fail_under, ruff mccabe/select, pyright mode, vulture
+        # min_confidence) diverges from quality-gates.toml -- closing the hole where
+        # a PR lowers pyproject fail_under 92->50 while leaving the manifest at 92.
+        #
+        # Anti-gaming: run origin/master's gate_setup (the check CODE), never the
+        # PR's own -- a PR editing its own manifest.py could neuter the check. The
+        # DATA under test is the PR working tree (quality-gates.toml [drift]
+        # bindings + the native files they point at). Fetch master's whole
+        # gate_setup/ into $RUNNER_TEMP and import it via PYTHONPATH. Same
+        # if/then/else bootstrap guard (PR copy only when master lacks the package,
+        # first-introduction PR, CODEOWNER-reviewed); a failing drift check FAILS
+        # the job (no || fallthrough).
+        if: github.event_name == 'pull_request'
+        run: |
+          if git cat-file -e origin/master:scripts/gate_setup/manifest.py 2>/dev/null; then
+            git archive origin/master scripts/gate_setup | tar -x -C "$RUNNER_TEMP"
+            PYTHONPATH="$RUNNER_TEMP/scripts" python -m gate_setup.manifest check-drift --file quality-gates.toml --profile .
+          else
+            echo "note: origin/master has no scripts/gate_setup/ yet (bootstrap) — running PR copy"
+            PYTHONPATH=scripts python -m gate_setup.manifest check-drift --file quality-gates.toml --profile .
+          fi
+
       - name: Suppression diff (visibility only, non-blocking)
         # Prints GitHub annotations for newly-added suppressions in this PR's
         # diff vs origin/master so a human reviewer sees them inline. Stdlib-only,

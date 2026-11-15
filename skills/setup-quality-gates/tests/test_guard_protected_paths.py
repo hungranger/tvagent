@@ -52,6 +52,21 @@ def test_default_protected_asks(tmp_path: Path, path: str):
     assert _asks(tmp_path, path)
 
 
+@pytest.mark.parametrize(
+    "path",
+    [
+        ".GITHUB/workflows/ci.yml",  # dir-run match, wrong case
+        "Scripts/Gate_Setup/manifest.py",  # PROTECTED_DIRS run, wrong case
+        "PyProject.TOML",  # basename, wrong case
+        "QUALITY-GATES.TOML",  # the manifest itself, wrong case
+    ],
+)
+def test_case_insensitive_protected_asks(tmp_path: Path, path: str):
+    # macOS FS is case-insensitive: a mixed-case spelling hits the real protected
+    # file but must not evade the guard.
+    assert _asks(tmp_path, path)
+
+
 def test_root_package_json_abs_asks(tmp_path: Path):
     assert _asks(tmp_path, str(tmp_path / "package.json"))
 

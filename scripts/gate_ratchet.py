@@ -27,6 +27,9 @@ from typing import Any
 # the skill tree's scripts/ (two levels above templates/scripts/), used when this
 # file runs from the skill tree itself. Appending (not inserting) also means a
 # stray sibling `scripts/` can never shadow the installed gate_setup.
+# CI invokes this as `python scripts/gate_ratchet.py` (NOT `python -I`): -I/-P
+# drops the script's own dir from sys.path, so `import gate_setup` would then
+# raise ModuleNotFoundError. Running under -I is unsupported.
 sys.path.append(str(Path(__file__).resolve().parents[2] / "scripts"))
 from gate_setup.manifest import (  # pyright: ignore[reportMissingImports]
     KEY_DIRECTIONS,
