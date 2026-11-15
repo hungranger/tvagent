@@ -1,5 +1,9 @@
 # Thresholds (Phases 1–2): measure, then propose
 
+Python recipes below; for rust/go/react-ts use the `[measure]` table and
+`[greenfield]` defaults in `profiles/<lang>/profile.toml`, and record the
+confirmed values in `quality-gates.toml`.
+
 Research-then-ask. Never propose a number without measuring it first — the
 skill computes a baseline from the repo's *current* reality, then asks the
 user to confirm or edit it. Greenfield (near-zero code) skips straight to
@@ -27,8 +31,8 @@ For each gate:
    - "current coverage 76% → floor 76? or aim higher?"
    - "worst complexity is 14 → cap 14 now, or set a tighter number to ratchet toward?"
    - "strict pyright fails on 40 files → start at `basic`, ratchet up later?"
-4. Record the confirmed value against its `{{TOKEN}}` (see
-   `templates/TOKENS.md`) for Phase 4 rendering.
+4. Record the confirmed value in `quality-gates.toml` (python template
+   tokens: `templates/TOKENS.md`) for Phase 4 rendering.
 
 ## Rules baked in
 

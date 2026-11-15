@@ -1,14 +1,25 @@
 ---
 name: setup-quality-gates
-description: Use when setting up or hardening quality gates (lint, types, coverage, security, mutation, anti-gaming ratchet + CI) for a Python project — greenfield or existing. Measures the repo, proposes baselines that pass day one, installs in tiers.
+description: Use when setting up or hardening quality gates (lint, types, coverage, security, mutation, anti-gaming ratchet + CI) for a Python, Rust, Go, or React/TypeScript project — greenfield or existing. Measures the repo, proposes baselines that pass day one, installs in tiers.
 ---
 
-# Setup Python Quality Gates
+# Setup Quality Gates
 
 A detect → measure → propose → tier → write → verify procedure. It installs
-a tamper-resistant Python quality-gate stack (lint, types, coverage,
-dead-code, security, optional mutation testing, and an anti-gaming ratchet)
-into greenfield or existing repos without producing a day-one wall of red.
+a tamper-resistant quality-gate stack (lint, types, coverage, dead-code,
+security, optional mutation testing, and an anti-gaming ratchet) into
+greenfield or existing repos without producing a day-one wall of red.
+
+Languages are **profiles** under `profiles/<lang>/profile.toml`: `python`,
+`rust`, `go`, `react-ts`. A language-agnostic manifest, `quality-gates.toml`,
+is the single source of truth for every threshold; native configs (ruff,
+clippy.toml, golangci, biome, ...) are rendered from it and `check-drift`
+proves they still match.
+
+**Python-spine dependency:** the gate scripts (`detect`, `render`,
+`manifest`, `gate_ratchet`, the guard hook) are Python using stdlib
+`tomllib`, so Python >= 3.11 must be available in CI and locally even for
+rust/go/react-ts repos.
 
 Phases 0, 1, and 5 are non-interactive. Phases 2, 3, and 4 each end with a
 user confirmation — never write, apply, or overwrite anything the user
@@ -18,15 +29,20 @@ hasn't confirmed.
 
 1. Run `python <skill-dir>/scripts/gate_setup/detect.py <target>` (e.g.
    `python <skill-dir>/scripts/gate_setup/detect.py .` from the target repo
-   root) and read the JSON it prints (keys: `pkg_manager`, `audit_export`,
-   `layout.{src_layout,core_candidates,packages}`,
-   `existing.{ruff,pyright,coverage,precommit,ci}`,
-   `git.{host,visibility,admin,gh_auth}`).
-2. For every key that came back `null` (most commonly `pkg_manager` or
-   `git.host`), do not guess — state what's missing and ask the user
+   root) and read the JSON it prints. Top level: `language`, `candidates`,
+   `git.{host,visibility,admin,gh_auth}`; python detail is namespaced under
+   `python.` (`python.pkg_manager`, `python.audit_export`,
+   `python.layout.{src_layout,core_candidates,packages}`,
+   `python.existing.{ruff,pyright,coverage,precommit,ci}`).
+2. Pick the profile from `language`: exactly one signal → that profile
+   (`python`, `rust`, `go`, `react-ts`). `language: null` with several
+   `candidates` (polyglot repo) or none → ask the user which profile; never
+   guess. The chosen `profiles/<lang>/profile.toml` drives Phases 1-4.
+3. For every key that came back `null` (most commonly `python.pkg_manager`
+   or `git.host`), do not guess — state what's missing and ask the user
    directly (e.g. "no lockfile found — which package manager: uv / poetry /
    pdm / pip?").
-3. Carry the full detection result forward; it drives every later phase
+4. Carry the full detection result forward; it drives every later phase
    (Phase 1's tool commands, Phase 2's import-linter proposal, Phase 4's
    template tokens, Phase 4's L3 eligibility).
 
@@ -38,15 +54,18 @@ adapts, and its fallback behavior.
 Run the actual tools against the repo to get real numbers — never propose a
 threshold you haven't measured.
 
-1. Coverage: `pytest --cov --cov-report=term-missing` (or
-   `--cov-report=json` for an exact number) — read the total coverage %.
-2. Complexity: `ruff check --select C901 --statistics .` — take the worst
-   reported function complexity.
-3. Type strictness: `pyright --outputjson` (or `--stats`) at `strict`; if it
-   fails, step down through `standard` → `basic` until one passes cleanly —
-   that mode is the baseline.
-4. Dead code: `vulture <src> <tests> --min-confidence 60` — count findings.
-5. If any tool isn't installed, install it into the project's dev
+Take the commands from the chosen profile's `[measure]` table (coverage,
+complexity, lint, types, deadcode, mutation, audit, arch):
+
+| Profile | coverage | complexity | types | deadcode |
+|---|---|---|---|---|
+| python | `pytest --cov` | `ruff check --select C901` | `pyright` (strict → standard → basic) | `vulture` |
+| rust | `cargo llvm-cov --summary-only` | `cargo clippy` cognitive_complexity | `cargo clippy -- -D warnings` | `cargo +nightly udeps` |
+| go | `go test -coverprofile` + `go tool cover -func` | `golangci-lint` gocyclo | `go vet` + `staticcheck` | `staticcheck -checks U1000` |
+| react-ts | `vitest run --coverage` | biome cognitive complexity | `tsc --noEmit` | `knip` |
+
+Read the coverage %, the worst function complexity, and the types/dead-code
+finding counts. If any tool isn't installed, install it into the project's dev
    dependencies first, using the package manager detected in Phase 0
    (`uv add --dev <tool>`, `poetry add --group dev <tool>`, etc.) — don't
    run an undeclared tool.
@@ -57,22 +76,23 @@ See `references/thresholds.md` for the exact measure/parse recipe per gate.
 
 1. For each gate, show a **measured vs. proposed** line and ask the user to
    confirm or edit it: `"current coverage 76% → floor 76? or aim higher?"`.
-2. Greenfield (near-empty repo): propose the strict canonical defaults —
-   coverage 92, complexity 10, pyright `strict`, vulture confidence 60 —
-   since there's no legacy debt to baseline against.
+2. Greenfield (near-empty repo): propose the profile's `[greenfield]`
+   defaults (python: coverage 90, complexity 10, pyright `strict`, vulture
+   confidence 60; rust/go/react-ts: coverage 80, complexity 15) — there's
+   no legacy debt to baseline against.
 3. Legacy (existing code): propose baseline = current measured reality for
    every gate. This is what makes gates pass on day one; the ratchet in L3
    only tightens from here. Pyright legacy baseline is the mode the code
    already passes at zero errors, with a documented graduate-to-strict path
    noted in the installed docs.
-4. Import-linter contracts: propose them **only if** `layout.core_candidates`
+4. Python only — import-linter contracts: propose them **only if** `python.layout.core_candidates`
    from Phase 0 is non-empty (a clear core/domain/entities package exists).
    Show the proposed contracts (forbidden: core imports adapters/backends;
    independence among sibling adapters) and ask to opt in. If
    `core_candidates` is empty, state plainly that import-linter is skipped
    and why — never invent contracts on a flat repo.
-5. Record every confirmed value against its `{{TOKEN}}`
-   (`templates/TOKENS.md`) for Phase 4.
+5. Record every confirmed value in `quality-gates.toml` (the manifest) for
+   Phase 4.
 
 See `references/thresholds.md` for the full rules (greenfield-strict vs.
 legacy-baseline, the pyright sharp edge, the confirm-loop shape).
@@ -84,7 +104,10 @@ legacy-baseline, the pyright sharp edge, the confirm-loop shape).
    L1 and still get real value.
 2. Briefly describe what each tier adds (pulled from
    `references/tiers.md`) so the choice is informed, not blind.
-3. If L3 is chosen, flag now (before Phase 4 writes anything) that its
+3. L3 also needs a ruleset model: **team** (require review by a code owner)
+   or **solo dev** (0 required approvals + guard hook + green CI — GitHub
+   forbids self-approval). Ask which; see `references/anti-gaming.md`.
+4. If L3 is chosen, flag now (before Phase 4 writes anything) that its
    branch-ruleset piece needs `git.admin` truthy and an eligible repo
    (public, or a paid plan on private) — otherwise it will install
    CI-side-only and degrade the rest to advisory.
@@ -98,24 +121,33 @@ For each target file (`pyproject.toml` gate blocks, `.pre-commit-config.yaml`,
 `CODEOWNERS`, `scripts/gate_ratchet.py`, `scripts/suppression_diff.py`,
 `ruleset.json`):
 
-1. Render the template: substitute every confirmed `{{TOKEN}}`
+0. **Manifest first.** Write the confirmed values to `quality-gates.toml`,
+   then render native configs from it with
+   `python <skill-dir>/scripts/gate_setup/render.py profiles/<lang> --manifest quality-gates.toml --out <target>`.
+   **Never blindly re-render over an existing hand-authored
+   `quality-gates.toml`**: the TOML dump does not preserve user comments.
+   Edit an existing manifest in place; re-render only a fresh one. After
+   writing, run `python -P -m gate_setup.manifest check-drift` (from the
+   skill's `scripts/`, `-P` stops cwd module shadowing) to prove native
+   configs equal the manifest. The same check runs as a blocking CI gate.
+1. Render the template: substitute every confirmed template token
    (`templates/TOKENS.md`); strip `# TEMPLATE-CONDITIONAL: uv-only` lines
    (currently just the `uv-lock-check` pre-commit hook) when the detected
-   `pkg_manager` isn't `uv`; add the import-linter pre-commit hook and its
+   `python.pkg_manager` isn't `uv`; add the import-linter pre-commit hook and its
    `[tool.importlinter]` contracts to the rendered `pyproject.toml` only if
-   the user opted in during Phase 2. `{{SRC_DIRS}}` renders differently per
+   the user opted in during Phase 2. `SRC_DIRS` renders differently per
    target: a TOML array (`["src/demo"]`) in `pyproject.gates.toml`, but
    space-separated paths (`src/demo`) in the `.pre-commit-config.yaml`
    vulture hook, since vulture's CLI takes positional directories, not a
-   list literal. `{{PKG_INSTALL_STEP}}` also renders per detected
-   `pkg_manager`: for `uv`, it expands to the `astral-sh/setup-uv` action
+   list literal. `PKG_INSTALL_STEP` also renders per detected
+   `python.pkg_manager`: for `uv`, it expands to the `astral-sh/setup-uv` action
    step followed by `uv sync`; for poetry/pdm/pip, it's just that tool's
    install command — CI never installs `setup-uv` for a non-uv repo.
 2. Create `.vulture_allowlist.py` (an empty file is enough — `touch
    .vulture_allowlist.py`) whenever the vulture gate is installed (L1), so
    the pre-commit vulture hook has something to read on day one instead of
    failing with "file not found."
-3. Check `existing.<key>` from Phase 0 for that target:
+3. Check `python.existing.<key>` from Phase 0 for that target:
    - `False` (nothing there) → write the rendered file directly.
    - `True` (something's already there) → **show a diff** of what would be
      added/changed, merge non-destructively (keep the user's existing
@@ -131,6 +163,9 @@ For each target file (`pyproject.toml` gate blocks, `.pre-commit-config.yaml`,
    (it's `nightly-mutation.yml`'s only consumer).
 5. **L3 only:**
    - Write `CODEOWNERS` (owner token filled from the user).
+   - The CI judge runs `origin/master`'s copy of the whole `gate_setup/`
+     package plus `gate_ratchet.py`; the guard casefolds paths for
+     case-insensitive filesystems (see `references/anti-gaming.md`).
    - **Edit-time guard hook:** copy `templates/scripts/guard_protected_paths.py`
      verbatim to the repo's `scripts/` (stdlib-only, repo-agnostic — no token
      substitution; a repo extends the protected set via
@@ -180,8 +215,8 @@ just asserting files were written. The verification step is implemented as
 `scripts/gate_setup/verify.py`, run by path — `python
 <skill-dir>/scripts/gate_setup/verify.py <target>` — not `-m`; it:
 
-1. Runs each installed gate (ruff, pyright, pytest+coverage, vulture, and
-   import-linter if opted in) and confirms all are green on day one — the
+1. Runs each installed gate (the profile's `[measure]` commands; for
+   python: ruff, pyright, pytest+coverage, vulture, import-linter if opted in) and confirms all are green on day one — the
    Phase 2 baseline strategy guarantees this.
 2. L2: confirms the CI workflow parses (`actionlint` if available).
 3. L3: performs the **live ratchet proof** — `prove_ratchet_bites()` builds

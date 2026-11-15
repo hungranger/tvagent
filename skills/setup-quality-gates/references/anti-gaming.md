@@ -61,6 +61,21 @@ teeth are not "block the merge" — they come from CODEOWNERS + required
 review on the gate-defining files it watches, so a human reviewer sees every
 new suppression before approving.
 
+## The master-copy judge covers the whole `gate_setup/` package
+
+CI runs `origin/master`'s copy of the judge, and that means the **entire
+`gate_setup/` package** (including `manifest.py`, which loads the manifest
+and implements `check-drift`), not just `gate_ratchet.py` and
+`suppression_diff.py`. Otherwise a PR could neuter the judge by editing its
+own `manifest.py`.
+
+`check-drift` is a **separate blocking master-copy CI gate**: every native
+config (clippy.toml, golangci, biome, ruff, ...) must equal the value in
+`quality-gates.toml`. Run it as `python -P -m gate_setup.manifest
+check-drift` — `-P` stops the cwd from shadowing master's modules with
+PR-supplied ones. The edit-time guard `casefold`s paths so protected files
+can't be dodged on case-insensitive filesystems (`Quality-Gates.toml`).
+
 ## Why CODEOWNERS needs branch protection
 
 `CODEOWNERS` alone is inert — GitHub only *enforces* code-owner review when

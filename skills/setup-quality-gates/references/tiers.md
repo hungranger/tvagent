@@ -5,7 +5,11 @@ user which tier(s) they want before Phase 4 writes anything.
 
 ## L1 — local
 
-Requires: Python + pre-commit.
+Requires: the language toolchain + pre-commit, and Python >= 3.11 (the gate
+scripts use stdlib `tomllib`, even for rust/go/react-ts repos). The list
+below is the python profile; other profiles install their `profile.toml`
+gate tools (clippy/cargo-llvm-cov, golangci-lint/govulncheck,
+biome/tsc/vitest/knip).
 
 Installs:
 - ruff (lint + format, C901 complexity cap, no-magic-value rule via `PLR2004`)
@@ -13,7 +17,7 @@ Installs:
 - pytest + coverage (floor confirmed in Phase 2)
 - vulture (dead-code, confidence confirmed in Phase 2)
 - import-linter contracts — **only if** the user opted in during Phase 2
-  (i.e. `layout.core_candidates` was non-empty and they confirmed the
+  (i.e. `python.layout.core_candidates` was non-empty and they confirmed the
   proposed contracts)
 - the pre-commit stage map: fast hygiene + ruff on `pre-commit`; pyright,
   pytest+coverage, pip-audit, ruff ARG, vulture, and (uv only) lock-check on
@@ -57,10 +61,11 @@ Adds:
   relative to `origin/master`
 - `scripts/suppression_diff.py` — annotates newly-added suppressions
   (`noqa`, `type: ignore`, `--no-verify`, etc.) on the PR, non-blocking
+- `quality-gates.toml` drift check (`check-drift`) as a blocking master-copy CI gate
 - `CODEOWNERS` covering the gate-defining files (`pyproject.toml`,
   `.pre-commit-config.yaml`, `.github/**`, the two scripts above)
 - a GitHub branch ruleset (`ruleset.json`) requiring green CI + CODEOWNER
-  review + no bypass on the default branch — applied via `gh api` **only
+  review (team) or 0 approvals + guard hook (solo dev) + no bypass on the default branch — applied via `gh api` **only
   when** `git.admin` is true and the repo is eligible (public, or private on
   a plan that supports rulesets)
 

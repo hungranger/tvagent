@@ -15,7 +15,7 @@ key comes back `null`/empty, say so and ask the user rather than assuming.
 python-specific live under the `python` key (e.g. `python.pkg_manager`,
 `python.existing.ruff`).
 
-Language precedence (root-scan only): `Cargo.toml` -> rust; `go.mod` -> go;
+Signal list (no precedence; root-scan only): `Cargo.toml` -> rust; `go.mod` -> go;
 `package.json` + (`tsconfig.json` or a react/next/vite dependency) ->
 react-ts; `pyproject.toml` or `setup.py` -> python.
 
@@ -25,9 +25,9 @@ react-ts; `pyproject.toml` or `setup.py` -> python.
 
 | Detector | JSON key(s) | Sniffs | Adapts | No-match fallback |
 |---|---|---|---|---|
-| Package manager | `pkg_manager`, `audit_export` | `uv.lock` / `poetry.lock` / `pdm.lock` / `requirements*.txt` (checked in that order) | wires `{{PKG_AUDIT_EXPORT}}` (pip-audit input) and the lock-check hook to the matched tool | `pkg_manager: null` → greenfield: offer `uv init`; existing repo with no lockfile: ask which manager, never guess |
-| Package layout | `layout.src_layout`, `layout.core_candidates`, `layout.packages` | `src/` layout vs flat; any package whose last path segment is `core`, `domain`, or `entities` | proposes import-linter contracts only when `core_candidates` is non-empty (Phase 2) | `core_candidates: []` → skip import-linter entirely, state why ("no core/domain/entities package found") |
-| Existing config | `existing.ruff`, `existing.pyright`, `existing.coverage`, `existing.precommit`, `existing.ci` | `[tool.ruff]` / `[tool.pyright]` / `[tool.coverage]` in `pyproject.toml`; `.pre-commit-config.yaml`; any workflow file under `.github/workflows/` | each `True` key becomes a merge target in Phase 4 (diff shown, confirm before overwrite) instead of a clean write | all `False` → clean install, no merge needed |
+| Package manager | `python.pkg_manager`, `python.audit_export` | `uv.lock` / `poetry.lock` / `pdm.lock` / `requirements*.txt` (checked in that order) | wires `PKG_AUDIT_EXPORT` (pip-audit input) and the lock-check hook to the matched tool | `python.pkg_manager: null` → greenfield: offer `uv init`; existing repo with no lockfile: ask which manager, never guess |
+| Package layout | `python.layout.src_layout`, `python.layout.core_candidates`, `python.layout.packages` | `src/` layout vs flat; any package whose last path segment is `core`, `domain`, or `entities` | proposes import-linter contracts only when `core_candidates` is non-empty (Phase 2) | `python.layout.core_candidates: []` → skip import-linter entirely, state why ("no core/domain/entities package found") |
+| Existing config | `python.existing.ruff`, `python.existing.pyright`, `python.existing.coverage`, `python.existing.precommit`, `python.existing.ci` | `[tool.ruff]` / `[tool.pyright]` / `[tool.coverage]` in `pyproject.toml`; `.pre-commit-config.yaml`; any workflow file under `.github/workflows/` | each `True` key becomes a merge target in Phase 4 (diff shown, confirm before overwrite) instead of a clean write | all `False` → clean install, no merge needed |
 | Git host + power | `git.host`, `git.visibility`, `git.admin`, `git.gh_auth` | `gh auth status`; `git remote get-url origin` for `github.com`; `gh repo view` for visibility/permission | picks the L3 enforcement actually applicable (ruleset via `gh api` vs CI-only) | `git.host != "github"` or `git.admin` falsy or no `gh_auth` → L3 degrades to advisory-only (see `anti-gaming.md`) |
 
 ## Handling nulls
@@ -35,7 +35,7 @@ react-ts; `pyproject.toml` or `setup.py` -> python.
 `detect()` never fails on a missing signal — it returns `null` for that key.
 Treat every `null` as a stop-and-ask, not a default:
 
-- `pkg_manager: null` on a non-empty repo → ask "which package manager: uv /
+- `python.pkg_manager: null` on a non-empty repo → ask "which package manager: uv /
   poetry / pdm / pip?" before Phase 1 measures anything (pip-audit and the
   lock-check hook need to know).
 - `git.host: null` → ask for the host; L2 (GitHub Actions CI) and L3
