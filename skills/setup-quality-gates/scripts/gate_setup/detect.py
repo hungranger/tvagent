@@ -99,16 +99,47 @@ def _git(root: Path) -> dict[str, Any]:
     return {"host": host, "visibility": visibility, "admin": admin, "gh_auth": authed}
 
 
-def detect(root: Path) -> dict[str, Any]:
-    root = Path(root)
+def _is_react_ts(root: Path) -> bool:
+    pkg = root / "package.json"
+    if not pkg.exists():
+        return False
+    if (root / "tsconfig.json").exists():
+        return True
+    try:
+        data: dict[str, Any] = json.loads(pkg.read_text())
+    except json.JSONDecodeError:
+        return False
+    deps: dict[str, Any] = {**data.get("dependencies", {}), **data.get("devDependencies", {})}
+    return any(k in deps for k in ("react", "next", "vite"))
+
+
+def _python(root: Path) -> dict[str, Any]:
     pm = _pkg_manager(root)
     return {
         "pkg_manager": pm,
         "audit_export": _AUDIT.get(pm) if pm else None,
         "layout": _layout(root),
         "existing": _existing(root),
-        "git": _git(root),
     }
+
+
+def detect(root: Path) -> dict[str, Any]:
+    root = Path(root)
+    signals = {
+        "go": (root / "go.mod").exists(),
+        "python": (root / "pyproject.toml").exists() or (root / "setup.py").exists(),
+        "react-ts": _is_react_ts(root),
+        "rust": (root / "Cargo.toml").exists(),
+    }
+    candidates = sorted(k for k, v in signals.items() if v)
+    language = candidates[0] if len(candidates) == 1 else None
+    out: dict[str, Any] = {"language": language, "candidates": candidates, "git": _git(root)}
+    if language == "python":
+        out["python"] = _python(root)
+    elif language:
+        # ponytail: non-python profiles fill these in their own tasks
+        out[language] = {"pkg_manager": None, "existing": {}}
+    return out
 
 
 if __name__ == "__main__":
