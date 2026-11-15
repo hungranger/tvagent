@@ -1,5 +1,5 @@
 ---
-name: setup-python-quality-gates
+name: setup-quality-gates
 description: Use when setting up or hardening quality gates (lint, types, coverage, security, mutation, anti-gaming ratchet + CI) for a Python project — greenfield or existing. Measures the repo, proposes baselines that pass day one, installs in tiers.
 ---
 

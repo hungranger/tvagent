@@ -1,4 +1,4 @@
-# setup-python-quality-gates Skill Implementation Plan
+# setup-quality-gates Skill Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -17,7 +17,7 @@
 - The `gate_ratchet.py` and `suppression_diff.py` templates ship **verbatim** from tvagent — repo-agnostic already; do not fork their logic.
 - Detection **never guesses silently** — every detector returns an explicit `null`/`"unknown"` the SKILL.md flow must handle by asking.
 - The skill **never lowers an already-higher threshold** on re-run (idempotency = detect-present → skip/diff, never stomp).
-- Skill directory name: `setup-python-quality-gates`. It is authored in this repo under `skills/setup-python-quality-gates/` (portable — copyable to `~/.claude/skills/` or a plugin).
+- Skill directory name: `setup-quality-gates`. It is authored in this repo under `skills/setup-quality-gates/` (portable — copyable to `~/.claude/skills/` or a plugin).
 - Commit messages end with: `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`
 - Work on a feature branch; land via PR to master (branch protection active: green `quality-gate` CI + CODEOWNER review, no bypass). Never push to master directly, never `--no-verify`.
 
@@ -26,10 +26,10 @@
 ### Task 1: Scaffold skill dir + copy verbatim assets
 
 **Files:**
-- Create: `skills/setup-python-quality-gates/SKILL.md` (skeleton only — frontmatter + section headers)
-- Create: `skills/setup-python-quality-gates/templates/scripts/gate_ratchet.py` (copied verbatim from repo root `scripts/gate_ratchet.py`)
-- Create: `skills/setup-python-quality-gates/templates/scripts/suppression_diff.py` (copied verbatim from `scripts/suppression_diff.py`)
-- Test: `skills/setup-python-quality-gates/tests/test_assets.py`
+- Create: `skills/setup-quality-gates/SKILL.md` (skeleton only — frontmatter + section headers)
+- Create: `skills/setup-quality-gates/templates/scripts/gate_ratchet.py` (copied verbatim from repo root `scripts/gate_ratchet.py`)
+- Create: `skills/setup-quality-gates/templates/scripts/suppression_diff.py` (copied verbatim from `scripts/suppression_diff.py`)
+- Test: `skills/setup-quality-gates/tests/test_assets.py`
 
 **Interfaces:**
 - Consumes: nothing.
@@ -38,7 +38,7 @@
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# skills/setup-python-quality-gates/tests/test_assets.py
+# skills/setup-quality-gates/tests/test_assets.py
 import subprocess, sys
 from pathlib import Path
 
@@ -59,23 +59,23 @@ def test_suppression_diff_importable():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pytest skills/setup-python-quality-gates/tests/test_assets.py -v`
+Run: `pytest skills/setup-quality-gates/tests/test_assets.py -v`
 Expected: FAIL — files don't exist (`No such file or directory`).
 
 - [ ] **Step 3: Create the scaffold + copy assets**
 
 ```bash
 cd /Users/hungvu/Workspace/projects/tvagent
-mkdir -p skills/setup-python-quality-gates/{templates/scripts,templates/docs,references,tests}
-cp scripts/gate_ratchet.py    skills/setup-python-quality-gates/templates/scripts/gate_ratchet.py
-cp scripts/suppression_diff.py skills/setup-python-quality-gates/templates/scripts/suppression_diff.py
+mkdir -p skills/setup-quality-gates/{templates/scripts,templates/docs,references,tests}
+cp scripts/gate_ratchet.py    skills/setup-quality-gates/templates/scripts/gate_ratchet.py
+cp scripts/suppression_diff.py skills/setup-quality-gates/templates/scripts/suppression_diff.py
 ```
 
 Then create `SKILL.md` with frontmatter and empty section headers (filled in Task 5):
 
 ```markdown
 ---
-name: setup-python-quality-gates
+name: setup-quality-gates
 description: Use when setting up or hardening quality gates (lint, types, coverage, security, mutation, anti-gaming ratchet + CI) for a Python project — greenfield or existing. Measures the repo, proposes baselines that pass day one, installs in tiers.
 ---
 
@@ -92,14 +92,14 @@ description: Use when setting up or hardening quality gates (lint, types, covera
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pytest skills/setup-python-quality-gates/tests/test_assets.py -v`
+Run: `pytest skills/setup-quality-gates/tests/test_assets.py -v`
 Expected: PASS (2 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add skills/setup-python-quality-gates
-git commit -m "feat(skill): scaffold setup-python-quality-gates + verbatim ratchet/suppression assets
+git add skills/setup-quality-gates
+git commit -m "feat(skill): scaffold setup-quality-gates + verbatim ratchet/suppression assets
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ```
@@ -109,14 +109,14 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ### Task 2: Parameterize config templates
 
 **Files:**
-- Create: `skills/setup-python-quality-gates/templates/pyproject.gates.toml`
-- Create: `skills/setup-python-quality-gates/templates/pre-commit-config.yaml`
-- Create: `skills/setup-python-quality-gates/templates/ci.yml`
-- Create: `skills/setup-python-quality-gates/templates/nightly-mutation.yml`
-- Create: `skills/setup-python-quality-gates/templates/ruleset.json`
-- Create: `skills/setup-python-quality-gates/templates/CODEOWNERS`
-- Create: `skills/setup-python-quality-gates/templates/TOKENS.md` (documents every `{{TOKEN}}`)
-- Test: `skills/setup-python-quality-gates/tests/test_templates.py`
+- Create: `skills/setup-quality-gates/templates/pyproject.gates.toml`
+- Create: `skills/setup-quality-gates/templates/pre-commit-config.yaml`
+- Create: `skills/setup-quality-gates/templates/ci.yml`
+- Create: `skills/setup-quality-gates/templates/nightly-mutation.yml`
+- Create: `skills/setup-quality-gates/templates/ruleset.json`
+- Create: `skills/setup-quality-gates/templates/CODEOWNERS`
+- Create: `skills/setup-quality-gates/templates/TOKENS.md` (documents every `{{TOKEN}}`)
+- Test: `skills/setup-quality-gates/tests/test_templates.py`
 
 **Interfaces:**
 - Consumes: nothing.
@@ -125,7 +125,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# skills/setup-python-quality-gates/tests/test_templates.py
+# skills/setup-quality-gates/tests/test_templates.py
 import re
 from pathlib import Path
 
@@ -152,7 +152,7 @@ def test_core_templates_exist():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pytest skills/setup-python-quality-gates/tests/test_templates.py -v`
+Run: `pytest skills/setup-quality-gates/tests/test_templates.py -v`
 Expected: FAIL — `test_core_templates_exist` (files missing).
 
 - [ ] **Step 3: Create the parameterized templates**
@@ -191,13 +191,13 @@ Base each on the tvagent original, replacing repo-specific values with tokens. C
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pytest skills/setup-python-quality-gates/tests/test_templates.py -v`
+Run: `pytest skills/setup-quality-gates/tests/test_templates.py -v`
 Expected: PASS (2 tests). If `test_every_used_token_is_documented` fails, add the missing token to `TOKENS.md` (or fix a typo'd token in a template).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add skills/setup-python-quality-gates/templates
+git add skills/setup-quality-gates/templates
 git commit -m "feat(skill): add {{token}}-parameterized gate config templates
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
@@ -208,12 +208,12 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ### Task 3: Fixture repos for detection + e2e
 
 **Files:**
-- Create: `skills/setup-python-quality-gates/tests/fixtures/greenfield/` (empty-ish package, `src/pkg/__init__.py`, minimal `pyproject.toml`, no lockfile)
+- Create: `skills/setup-quality-gates/tests/fixtures/greenfield/` (empty-ish package, `src/pkg/__init__.py`, minimal `pyproject.toml`, no lockfile)
 - Create: `.../fixtures/uv_hexagonal/` (`uv.lock`, `src/app/core/__init__.py` + `src/app/adapters/__init__.py`, `pyproject.toml`)
 - Create: `.../fixtures/poetry_flat/` (`poetry.lock`, flat `mod.py` at root, `pyproject.toml` with `[tool.poetry]`)
 - Create: `.../fixtures/partial_config/` (has `[tool.ruff]` + a `.pre-commit-config.yaml` already)
 - Test: (fixtures are consumed by Task 4; this task's deliverable is the fixtures themselves + a sanity test)
-- Test file: `skills/setup-python-quality-gates/tests/test_fixtures_shape.py`
+- Test file: `skills/setup-quality-gates/tests/test_fixtures_shape.py`
 
 **Interfaces:**
 - Consumes: nothing.
@@ -222,7 +222,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# skills/setup-python-quality-gates/tests/test_fixtures_shape.py
+# skills/setup-quality-gates/tests/test_fixtures_shape.py
 from pathlib import Path
 F = Path(__file__).resolve().parents[1] / "tests/fixtures"
 
@@ -238,14 +238,14 @@ def test_fixture_markers_present():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pytest skills/setup-python-quality-gates/tests/test_fixtures_shape.py -v`
+Run: `pytest skills/setup-quality-gates/tests/test_fixtures_shape.py -v`
 Expected: FAIL — fixture files missing.
 
 - [ ] **Step 3: Create the fixture files**
 
 Create each with minimal real content. Lockfiles can be near-empty stubs (detection only checks their existence + name), e.g.:
 ```bash
-cd skills/setup-python-quality-gates/tests/fixtures
+cd skills/setup-quality-gates/tests/fixtures
 mkdir -p greenfield/src/pkg uv_hexagonal/src/app/core uv_hexagonal/src/app/adapters poetry_flat partial_config
 touch greenfield/src/pkg/__init__.py
 printf '[project]\nname="pkg"\nversion="0"\n' > greenfield/pyproject.toml
@@ -260,13 +260,13 @@ printf 'repos: []\n' > partial_config/.pre-commit-config.yaml
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pytest skills/setup-python-quality-gates/tests/test_fixtures_shape.py -v`
+Run: `pytest skills/setup-quality-gates/tests/test_fixtures_shape.py -v`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add skills/setup-python-quality-gates/tests/fixtures skills/setup-python-quality-gates/tests/test_fixtures_shape.py
+git add skills/setup-quality-gates/tests/fixtures skills/setup-quality-gates/tests/test_fixtures_shape.py
 git commit -m "test(skill): add detection fixture repos (greenfield/uv-hex/poetry-flat/partial)
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
@@ -277,9 +277,9 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ### Task 4: `detect.py` — deterministic detection
 
 **Files:**
-- Create: `skills/setup-python-quality-gates/scripts/gate_setup/detect.py`
-- Create: `skills/setup-python-quality-gates/scripts/gate_setup/__init__.py` (empty)
-- Test: `skills/setup-python-quality-gates/tests/test_detect.py`
+- Create: `skills/setup-quality-gates/scripts/gate_setup/detect.py`
+- Create: `skills/setup-quality-gates/scripts/gate_setup/__init__.py` (empty)
+- Test: `skills/setup-quality-gates/tests/test_detect.py`
 
 **Interfaces:**
 - Consumes: fixtures from Task 3.
@@ -297,7 +297,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# skills/setup-python-quality-gates/tests/test_detect.py
+# skills/setup-quality-gates/tests/test_detect.py
 import sys
 from pathlib import Path
 SKILL = Path(__file__).resolve().parents[1]
@@ -332,13 +332,13 @@ def test_partial_config_detected():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pytest skills/setup-python-quality-gates/tests/test_detect.py -v`
+Run: `pytest skills/setup-quality-gates/tests/test_detect.py -v`
 Expected: FAIL — `ModuleNotFoundError: gate_setup.detect`.
 
 - [ ] **Step 3: Write minimal implementation**
 
 ```python
-# skills/setup-python-quality-gates/scripts/gate_setup/detect.py
+# skills/setup-quality-gates/scripts/gate_setup/detect.py
 from __future__ import annotations
 import json, subprocess, sys, tomllib
 from pathlib import Path
@@ -436,13 +436,13 @@ if __name__ == "__main__":
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pytest skills/setup-python-quality-gates/tests/test_detect.py -v`
+Run: `pytest skills/setup-quality-gates/tests/test_detect.py -v`
 Expected: PASS (4 tests). The `_git` calls on fixtures return `gh_auth` from the real environment but `host=None` (fixtures have no origin remote), so git assertions aren't made in these tests — correct.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add skills/setup-python-quality-gates/scripts skills/setup-python-quality-gates/tests/test_detect.py
+git add skills/setup-quality-gates/scripts skills/setup-quality-gates/tests/test_detect.py
 git commit -m "feat(skill): add detect.py (pkg-mgr/layout/existing-config/git detection)
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
@@ -453,12 +453,12 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ### Task 5: Write the SKILL.md procedure + reference docs
 
 **Files:**
-- Modify: `skills/setup-python-quality-gates/SKILL.md` (fill the phase sections)
-- Create: `skills/setup-python-quality-gates/references/detectors.md`
-- Create: `skills/setup-python-quality-gates/references/thresholds.md`
-- Create: `skills/setup-python-quality-gates/references/tiers.md`
-- Create: `skills/setup-python-quality-gates/references/anti-gaming.md`
-- Test: `skills/setup-python-quality-gates/tests/test_skill_doc.py`
+- Modify: `skills/setup-quality-gates/SKILL.md` (fill the phase sections)
+- Create: `skills/setup-quality-gates/references/detectors.md`
+- Create: `skills/setup-quality-gates/references/thresholds.md`
+- Create: `skills/setup-quality-gates/references/tiers.md`
+- Create: `skills/setup-quality-gates/references/anti-gaming.md`
+- Test: `skills/setup-quality-gates/tests/test_skill_doc.py`
 
 **Interfaces:**
 - Consumes: `detect.py` (Phase 0 runs `python -m gate_setup.detect .`), all templates (Phase 4 renders their tokens), `references/*` (linked from SKILL.md).
@@ -469,7 +469,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 The prose procedure isn't unit-testable, but its *structure* is — assert every phase, every reference link, and the measure→propose→confirm gate are present and internally consistent.
 
 ```python
-# skills/setup-python-quality-gates/tests/test_skill_doc.py
+# skills/setup-quality-gates/tests/test_skill_doc.py
 from pathlib import Path
 SKILL = Path(__file__).resolve().parents[1]
 
@@ -496,7 +496,7 @@ def test_l3_degradation_documented():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pytest skills/setup-python-quality-gates/tests/test_skill_doc.py -v`
+Run: `pytest skills/setup-quality-gates/tests/test_skill_doc.py -v`
 Expected: FAIL — reference files missing / phase bodies empty of the asserted keywords.
 
 - [ ] **Step 3: Write the SKILL.md body + references**
@@ -514,13 +514,13 @@ Write the four reference docs with the depth content from the spec (detectors ta
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pytest skills/setup-python-quality-gates/tests/test_skill_doc.py -v`
+Run: `pytest skills/setup-quality-gates/tests/test_skill_doc.py -v`
 Expected: PASS (3 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add skills/setup-python-quality-gates/SKILL.md skills/setup-python-quality-gates/references skills/setup-python-quality-gates/tests/test_skill_doc.py
+git add skills/setup-quality-gates/SKILL.md skills/setup-quality-gates/references skills/setup-quality-gates/tests/test_skill_doc.py
 git commit -m "feat(skill): write SKILL.md procedure + reference docs
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
@@ -531,8 +531,8 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ### Task 6: `--verify` self-verification (live ratchet proof)
 
 **Files:**
-- Create: `skills/setup-python-quality-gates/scripts/gate_setup/verify.py`
-- Test: `skills/setup-python-quality-gates/tests/test_verify.py`
+- Create: `skills/setup-quality-gates/scripts/gate_setup/verify.py`
+- Test: `skills/setup-quality-gates/tests/test_verify.py`
 
 **Interfaces:**
 - Consumes: an installed repo's `scripts/gate_ratchet.py` + `pyproject.toml`.
@@ -541,7 +541,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# skills/setup-python-quality-gates/tests/test_verify.py
+# skills/setup-quality-gates/tests/test_verify.py
 import sys, shutil, textwrap
 from pathlib import Path
 SKILL = Path(__file__).resolve().parents[1]
@@ -570,13 +570,13 @@ def test_verify_leaves_pyproject_untouched(tmp_path):
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pytest skills/setup-python-quality-gates/tests/test_verify.py -v`
+Run: `pytest skills/setup-quality-gates/tests/test_verify.py -v`
 Expected: FAIL — `ModuleNotFoundError: gate_setup.verify`.
 
 - [ ] **Step 3: Write minimal implementation**
 
 ```python
-# skills/setup-python-quality-gates/scripts/gate_setup/verify.py
+# skills/setup-quality-gates/scripts/gate_setup/verify.py
 from __future__ import annotations
 import re, subprocess, sys, tempfile, shutil
 from pathlib import Path
@@ -622,13 +622,13 @@ Note for implementer: `gate_ratchet.py` compares against `origin/master` by defa
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pytest skills/setup-python-quality-gates/tests/test_verify.py -v`
+Run: `pytest skills/setup-quality-gates/tests/test_verify.py -v`
 Expected: PASS (2 tests). If the ratchet's base-ref lookup fails in the temp repo, fix the temp-repo setup (create the ref the ratchet reads) — do not edit the verbatim ratchet.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add skills/setup-python-quality-gates/scripts/gate_setup/verify.py skills/setup-python-quality-gates/tests/test_verify.py
+git add skills/setup-quality-gates/scripts/gate_setup/verify.py skills/setup-quality-gates/tests/test_verify.py
 git commit -m "feat(skill): add --verify live ratchet-bites self-check
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
@@ -639,8 +639,8 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ### Task 7: Comprehensive verification (spec satisfaction + real end-to-end)
 
 **Files:**
-- Create: `skills/setup-python-quality-gates/tests/test_e2e_install.py`
-- Create: `skills/setup-python-quality-gates/VERIFICATION.md` (the criterion→check map + "what I did NOT verify")
+- Create: `skills/setup-quality-gates/tests/test_e2e_install.py`
+- Create: `skills/setup-quality-gates/VERIFICATION.md` (the criterion→check map + "what I did NOT verify")
 
 **Interfaces:**
 - Consumes: everything built in Tasks 1–6.
@@ -653,7 +653,7 @@ Write `VERIFICATION.md` with a row per S1–S10 (from the spec), each naming the
 - [ ] **Step 2: Write the real end-to-end test (L1 on greenfield)**
 
 ```python
-# skills/setup-python-quality-gates/tests/test_e2e_install.py
+# skills/setup-quality-gates/tests/test_e2e_install.py
 import sys, shutil, subprocess, textwrap
 from pathlib import Path
 SKILL = Path(__file__).resolve().parents[1]
@@ -697,13 +697,13 @@ def test_greenfield_l1_is_green_day_one(tmp_path):
 
 - [ ] **Step 3: Run test to verify it fails, then passes**
 
-Run: `pytest skills/setup-python-quality-gates/tests/test_e2e_install.py -v`
+Run: `pytest skills/setup-quality-gates/tests/test_e2e_install.py -v`
 Expected first: FAIL if the rendered template has a stray token or a bad table (fix the template). Then PASS once the greenfield block renders cleanly and clean code clears ruff + 100% coverage ≥ 92 floor.
 
 - [ ] **Step 4: Run the FULL skill test suite + this repo's gate**
 
 ```bash
-pytest skills/setup-python-quality-gates/ -v
+pytest skills/setup-quality-gates/ -v
 PATH="$PWD/.venv/bin:$PATH" pre-commit run --all-files --hook-stage pre-commit
 PATH="$PWD/.venv/bin:$PATH" SKIP=pip-audit pre-commit run --all-files --hook-stage pre-push
 ```
@@ -716,11 +716,11 @@ List honestly: L2 CI job not run in a real GitHub Actions runner here; L3 rulese
 - [ ] **Step 6: Commit + open PR**
 
 ```bash
-git add skills/setup-python-quality-gates/tests/test_e2e_install.py skills/setup-python-quality-gates/VERIFICATION.md
+git add skills/setup-quality-gates/tests/test_e2e_install.py skills/setup-quality-gates/VERIFICATION.md
 git commit -m "test(skill): e2e greenfield L1 green-day-one + S1-S10 verification map
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
-gh pr create --base master --title "feat: setup-python-quality-gates skill" --body "$(cat <<'EOF'
+gh pr create --base master --title "feat: setup-quality-gates skill" --body "$(cat <<'EOF'
 Reusable skill that installs the tiered, tamper-resistant quality-gate stack into any Python repo. Implements docs/superpowers/specs/2026-09-18-quality-gates-skill-design.md.
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)

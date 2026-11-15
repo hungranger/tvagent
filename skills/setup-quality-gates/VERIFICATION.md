@@ -1,4 +1,4 @@
-# Verification: setup-python-quality-gates
+# Verification: setup-quality-gates
 
 Maps each spec success criterion (S1-S10, `docs/superpowers/specs/2026-09-18-quality-gates-skill-design.md`)
 to the concrete check that satisfies it in this repo.
@@ -6,7 +6,7 @@ to the concrete check that satisfies it in this repo.
 | ID | Criterion | Status | Check |
 |----|-----------|--------|-------|
 | S1 | Greenfield repo, L1 install yields strict defaults, all gates green | **Automated here** | `tests/test_e2e_install.py::test_greenfield_l1_is_green_day_one` — builds a real typed+tested package, renders the strict greenfield gate block from `templates/pyproject.gates.toml`, runs real `ruff check` and `pytest --cov --cov-fail-under=92` subprocesses against it. Both exit 0. |
-| S2 | Legacy repo with failing strict checks produces gates that pass day one (baseline) | **Deferred (manual)** | Needs a real repo with pre-existing lint/type/coverage debt to prove the baselined thresholds pass without weakening the tool's own defaults. Run: `python skills/setup-python-quality-gates/scripts/gate_setup/detect.py <debt-repo>` then apply the skill's Phase 5 baseline-fit logic and confirm `ruff check .` / `pytest --cov` are green at the *baselined* (not strict) floor. No debt fixture repo exists in this tree. |
+| S2 | Legacy repo with failing strict checks produces gates that pass day one (baseline) | **Deferred (manual)** | Needs a real repo with pre-existing lint/type/coverage debt to prove the baselined thresholds pass without weakening the tool's own defaults. Run: `python skills/setup-quality-gates/scripts/gate_setup/detect.py <debt-repo>` then apply the skill's Phase 5 baseline-fit logic and confirm `ruff check .` / `pytest --cov` are green at the *baselined* (not strict) floor. No debt fixture repo exists in this tree. |
 | S3 | Re-running the skill never lowers an already-higher threshold | **Automated here** | `tests/test_fixtures_shape.py` + `tests/fixtures/partial_config/*` exercise the merge-not-stomp path over pre-existing config; the "never lower" rule itself is enforced in Phase 4 of `SKILL.md` (documented procedure), asserted at the unit level via `detect()`'s `existing` flags in `tests/test_detect.py`. Full idempotency re-run (pre-set floor 95 → run skill → still 95) requires driving the interactive Phase 4 flow end-to-end and is not exercised as a hermetic test. |
 | S4 | Package-manager detection wires lock-check + pip-audit for uv AND poetry | **Automated here** | `tests/test_detect.py` runs `detect()` against `tests/fixtures/uv_hexagonal` (uv.lock) and `tests/fixtures/poetry_flat` (poetry.lock) and asserts `pkg_manager` and `audit_export` resolve correctly for both. |
 | S5 | import-linter contracts proposed only on a clear shape; skipped + reported on a flat repo | **Automated here** | `tests/test_detect.py` asserts `core_candidates` is non-empty for `tests/fixtures/uv_hexagonal` (has `core/`) and empty for `tests/fixtures/poetry_flat` (flat module). |
@@ -35,4 +35,4 @@ PATH="$PWD/.venv/bin:$PATH" pre-commit run --all-files --hook-stage pre-commit  
 PATH="$PWD/.venv/bin:$PATH" SKIP=pip-audit pre-commit run --all-files --hook-stage pre-push   # all hooks passed (pip-audit skipped: sandbox pyexpat issue)
 ```
 
-`skills/` was already excluded from tvagent's ruff/pyright/coverage config by a prior task (Task 6 precedent, `pyproject.toml` lines 20-21/45-46/79) and from the two `ruff-arg`/`ruff-legacy-alias` pre-commit hooks (`.pre-commit-config.yaml` lines 38, 42) for `skills/setup-python-quality-gates/templates/`. No additional exclude was needed for Task 7 — `tests/test_e2e_install.py` lives under `skills/`, already covered.
+`skills/` was already excluded from tvagent's ruff/pyright/coverage config by a prior task (Task 6 precedent, `pyproject.toml` lines 20-21/45-46/79) and from the two `ruff-arg`/`ruff-legacy-alias` pre-commit hooks (`.pre-commit-config.yaml` lines 38, 42) for `skills/setup-quality-gates/templates/`. No additional exclude was needed for Task 7 — `tests/test_e2e_install.py` lives under `skills/`, already covered.

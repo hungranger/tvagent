@@ -35,11 +35,11 @@ repos:
       - id: check-yaml
         stages: [pre-commit]
         # skill templates contain {{TOKEN}} placeholders, not valid YAML.
-        exclude: ^skills/setup-python-quality-gates/templates/
+        exclude: ^skills/setup-quality-gates/templates/
       - id: check-toml
         stages: [pre-commit]
         # skill templates contain {{TOKEN}} placeholders, not valid TOML.
-        exclude: ^skills/setup-python-quality-gates/templates/
+        exclude: ^skills/setup-quality-gates/templates/
       - id: check-merge-conflict
         stages: [pre-commit]
       - id: check-added-large-files

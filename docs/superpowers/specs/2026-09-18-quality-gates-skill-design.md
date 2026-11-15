@@ -1,4 +1,4 @@
-# Design: `setup-python-quality-gates` skill
+# Design: `setup-quality-gates` skill
 
 **Date:** 2026-09-18
 **Status:** Approved (brainstorm), pending spec review → writing-plans
@@ -44,7 +44,7 @@ that enforcement model.
 The skill is a superpowers-style skill directory:
 
 ```
-setup-python-quality-gates/
+setup-quality-gates/
   SKILL.md                 # the detect→propose→write→verify procedure
   references/
     thresholds.md          # how to measure + baseline each threshold
