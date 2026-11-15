@@ -1,0 +1,25 @@
+[gates.coverage]
+tools = ["pytest-cov"]
+impl_lang = "python"
+threshold_key = "coverage_floor"
+threshold_mechanism = "flag"
+blocking = true
+
+[gates.complexity]
+tools = ["ruff"]
+impl_lang = "python"
+threshold_key = "complexity_max"
+threshold_mechanism = "config"
+blocking = true
+
+[drift]
+"ruff.toml#lint.mccabe.max-complexity" = "complexity_max"
+
+[coverage]
+metric = "line"
+
+[measure]
+coverage = "pytest --cov"
+
+[greenfield]
+complexity_max = 10

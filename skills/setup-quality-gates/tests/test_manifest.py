@@ -86,3 +86,36 @@ def test_missing_key_message_clear(tmp_path: Path):
     (tmp_path / "quality-gates.toml").write_text("[thresholds]\ncoverage_floor = 80\n")
     r = _cli(tmp_path, "get", "complexity_max")
     assert r.returncode == NOT_FOUND and "missing key: complexity_max" in r.stderr
+
+
+def _drift(tmp_path: Path, manifest: str, **files: str) -> subprocess.CompletedProcess[str]:
+    for name, body in files.items():
+        (tmp_path / name.replace("_", ".", 1)).write_text(body)
+    (tmp_path / "quality-gates.toml").write_text(manifest)
+    return _cli(tmp_path, "check-drift", "--profile", ".")
+
+
+def test_check_drift_detects_mismatch(tmp_path: Path):
+    m = '[thresholds]\ncomplexity_max = 9\n[drift]\n"r.toml#a.b" = "complexity_max"\n'
+    r = _drift(tmp_path, m, r_toml="[a]\nb = 10\n")
+    assert r.returncode == 1 and "native=10" in r.stderr
+
+
+def test_check_drift_json_native(tmp_path: Path):
+    m = '[thresholds]\ncomplexity_max = 9\n[drift]\n"b.json#a.b" = "complexity_max"\n'
+    assert _drift(tmp_path, m, b_json='{"a": {"b": 9}}').returncode == 0
+    assert _drift(tmp_path, m, b_json='{"a": {"b": 8}}').returncode == 1
+
+
+def test_check_drift_malformed_is_drift_not_crash(tmp_path: Path):
+    m = '[thresholds]\ncomplexity_max = 9\n[drift]\n"r.toml#a.b.c" = "complexity_max"\n'
+    r = _drift(tmp_path, m, r_toml="[a]\nb = 1\n")
+    assert r.returncode == 1 and "Traceback" not in r.stderr
+    assert _drift(tmp_path, "drift = 1\n").returncode == 1
+
+
+def test_check_drift_missing_binding_fails(tmp_path: Path):
+    prof = SKILL / "tests" / "fixtures" / "profile_fake"
+    (tmp_path / "quality-gates.toml").write_text("[thresholds]\ncomplexity_max = 9\n")
+    r = _cli(tmp_path, "check-drift", "--profile", ".", "--gates", str(prof))
+    assert r.returncode == 1 and "complexity_max" in r.stderr

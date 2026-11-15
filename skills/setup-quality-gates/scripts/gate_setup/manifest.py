@@ -1,7 +1,9 @@
 """quality-gates.toml: validator, direction registry, `get` / `check-drift` CLI."""
+
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import tomllib
 from pathlib import Path
@@ -95,27 +97,64 @@ def get(manifest: dict[str, Any], key: str) -> str:
     return "\n".join(v) if isinstance(v, list) else str(v)  # pyright: ignore[reportUnknownArgumentType]
 
 
+def load_profile(profile_dir: Path) -> dict[str, Any]:
+    try:
+        with (profile_dir / "profile.toml").open("rb") as f:
+            return tomllib.load(f)
+    except (OSError, tomllib.TOMLDecodeError) as e:
+        raise ManifestError(f"{profile_dir}/profile.toml: {e}") from e
+
+
+def gates_of(profile: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    g = profile.get("gates", {})
+    return g if isinstance(g, dict) else {}  # pyright: ignore[reportUnknownVariableType]
+
+
+def config_only_keys(profile: dict[str, Any]) -> list[str]:
+    """Threshold keys whose only enforcement is a native config file."""
+    return sorted(
+        g["threshold_key"]
+        for g in gates_of(profile).values()
+        if g.get("threshold_mechanism") == "config" and g.get("threshold_key")
+    )
+
+
 def _native(spec: str, base: Path) -> Any:
-    """`<native_path>#<dotted.key>` -> value from a TOML file."""
+    """`<native_path>#<dotted.key>` -> value from a TOML or JSON file (by extension)."""
     rel, _, dotted = spec.partition("#")
-    with (base / rel).open("rb") as f:
-        v: Any = tomllib.load(f)
+    path = base / rel
+    with path.open("rb") as f:
+        v: Any = json.load(f) if path.suffix == ".json" else tomllib.load(f)
     for part in dotted.split("."):
-        v = v[part]
+        if not isinstance(v, dict) or part not in v:
+            raise KeyError(part)
+        v = v[part]  # pyright: ignore[reportUnknownVariableType]
     return v
 
 
-def check_drift(manifest: dict[str, Any], base: Path) -> list[str]:
+def check_drift(manifest: dict[str, Any], base: Path, gates: Path | None = None) -> list[str]:
+    """Native-vs-manifest mismatches; `gates` (profile dir) adds unbound config-only keys."""
     out: list[str] = []
-    for spec, mkey in _table(manifest, "drift").items():
+    try:
+        drift = _table(manifest, "drift")
+    except ManifestError as e:
+        return [str(e)]
+    for spec, mkey in drift.items():
         try:
             nat = _native(spec, base)
-        except (OSError, KeyError, tomllib.TOMLDecodeError) as e:
+            want = _lookup(manifest, mkey)
+        except (OSError, KeyError, ValueError, ManifestError) as e:  # ValueError: bad TOML/JSON
             out.append(f"{spec}: unreadable ({e!r})")
             continue
-        want = _lookup(manifest, mkey)
         if nat != want:
             out.append(f"{spec}: native={nat!r} manifest[{mkey}]={want!r}")
+    if gates is not None:
+        bound = set(drift.values())
+        out += [
+            f"{k}: config-only threshold has no [drift] binding"
+            for k in config_only_keys(load_profile(gates))
+            if k in _table(manifest, "thresholds") and k not in bound
+        ]
     return out
 
 
@@ -126,6 +165,7 @@ def main(argv: list[str] | None = None) -> int:
     g.add_argument("key")
     d = sub.add_parser("check-drift")
     d.add_argument("--profile", type=Path, default=Path())
+    d.add_argument("--gates", type=Path, default=None)
     for p in (g, d):
         p.add_argument("--file", type=Path, default=Path("quality-gates.toml"))
     a = ap.parse_args(argv)
@@ -134,7 +174,7 @@ def main(argv: list[str] | None = None) -> int:
         if a.cmd == "get":
             print(get(m, a.key))
             return 0
-        bad = check_drift(m, a.profile)
+        bad = check_drift(m, a.profile, a.gates)
     except (ManifestError, KeyError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 2

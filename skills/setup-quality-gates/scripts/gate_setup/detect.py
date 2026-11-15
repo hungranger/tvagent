@@ -14,6 +14,7 @@ _AUDIT: dict[str, str] = {
     "pip": "cat requirements.txt",
 }
 
+
 def _pkg_manager(root: Path) -> str | None:
     if (root / "uv.lock").exists():
         return "uv"
@@ -24,6 +25,7 @@ def _pkg_manager(root: Path) -> str | None:
     if list(root.glob("requirements*.txt")):
         return "pip"
     return None
+
 
 def _layout(root: Path) -> dict[str, Any]:
     src = root / "src"
@@ -40,8 +42,12 @@ def _layout(root: Path) -> dict[str, Any]:
             packages.append(dotted)
             if rel.parts and rel.parts[-1] in {"core", "domain", "entities"}:
                 core_candidates.append(dotted)
-    return {"src_layout": src_layout, "core_candidates": sorted(core_candidates),
-            "packages": sorted(packages)}
+    return {
+        "src_layout": src_layout,
+        "core_candidates": sorted(core_candidates),
+        "packages": sorted(packages),
+    }
+
 
 def _existing(root: Path) -> dict[str, bool]:
     pyproject: dict[str, Any] = {}
@@ -58,21 +64,29 @@ def _existing(root: Path) -> dict[str, bool]:
         "coverage": "coverage" in tool,
         "precommit": (root / ".pre-commit-config.yaml").exists(),
         "ci": (root / ".github" / "workflows").is_dir()
-              and any((root / ".github" / "workflows").glob("*.y*ml")),
+        and any((root / ".github" / "workflows").glob("*.y*ml")),
     }
+
 
 def _git(root: Path) -> dict[str, Any]:
     def gh(*args: str) -> str | None:
         try:
-            r = subprocess.run(["gh", *args], cwd=root, capture_output=True, text=True,
-                                timeout=15, check=False)
+            r = subprocess.run(
+                ["gh", *args], cwd=root, capture_output=True, text=True, timeout=15, check=False
+            )
             return r.stdout.strip() if r.returncode == 0 else None
         except (FileNotFoundError, subprocess.TimeoutExpired):
             return None
+
     authed = gh("auth", "status") is not None
     host: str | None = None
-    remote = subprocess.run(["git", "remote", "get-url", "origin"], cwd=root,
-                            capture_output=True, text=True, check=False)
+    remote = subprocess.run(
+        ["git", "remote", "get-url", "origin"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
     if remote.returncode == 0 and "github.com" in remote.stdout:
         host = "github"
     visibility: str | None = None
@@ -84,6 +98,7 @@ def _git(root: Path) -> dict[str, Any]:
         admin = (adm == "ADMIN") if adm is not None else None
     return {"host": host, "visibility": visibility, "admin": admin, "gh_auth": authed}
 
+
 def detect(root: Path) -> dict[str, Any]:
     root = Path(root)
     pm = _pkg_manager(root)
@@ -94,6 +109,7 @@ def detect(root: Path) -> dict[str, Any]:
         "existing": _existing(root),
         "git": _git(root),
     }
+
 
 if __name__ == "__main__":
     target = Path(sys.argv[1]) if len(sys.argv) > 1 else Path.cwd()
