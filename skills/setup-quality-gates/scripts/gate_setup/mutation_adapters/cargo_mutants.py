@@ -12,7 +12,9 @@ from . import pct
 
 def _n(label: str, raw: str) -> int:
     m = re.search(rf"(\d+) {label}", raw)
-    return int(m.group(1)) if m else 0
+    if not m:
+        raise ValueError(f"no {label!r} count in tool output")
+    return int(m.group(1))
 
 
 def score(raw: str) -> int:

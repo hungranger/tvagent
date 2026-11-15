@@ -4,7 +4,7 @@ from pathlib import Path
 
 SKILL = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SKILL / "scripts"))
-from gate_setup.verify import prove_ratchet_bites  # noqa: E402
+from gate_setup.verify import prove_ratchet_bites  # noqa: E402  # pyright: ignore[reportUnknownVariableType]
 
 MANIFEST = """[meta]
 language = "python"
@@ -36,4 +36,10 @@ def test_verify_seeds_manifest(tmp_path: Path) -> None:
 def test_verify_false_without_manifest(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
     (repo / "quality-gates.toml").unlink()
+    assert prove_ratchet_bites(repo) is False
+
+
+def test_verify_crash_is_not_a_bite(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    (repo / "scripts/gate_setup/manifest.py").write_text("raise ImportError('boom')\n")
     assert prove_ratchet_bites(repo) is False

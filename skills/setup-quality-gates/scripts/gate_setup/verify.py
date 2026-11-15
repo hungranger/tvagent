@@ -57,7 +57,8 @@ def prove_ratchet_bites(root: Path) -> bool:
             [sys.executable, str(work / "scripts" / "gate_ratchet.py")],
             cwd=work, capture_output=True, text=True, check=False, env=env,
         )
-        return result.returncode != 0
+        # Require the ratchet's own failure message so a crash (ImportError) is not a "bite".
+        return result.returncode != 0 and "coverage_floor lowered" in result.stdout
 
 
 if __name__ == "__main__":

@@ -2,10 +2,9 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from gate_setup.mutation_adapters import score  # noqa: E402
+from gate_setup.mutation_adapters import score  # noqa: E402  # pyright: ignore[reportUnknownVariableType]
 
 MUTMUT = '{"killed": 246, "survived": 85, "total": 400, "no_tests": 3}'
-STRYKER_SCORE = '{"schemaVersion": "1", "mutationScore": 82.5, "files": {}}'
 STRYKER_FILES = (
     '{"schemaVersion": "1", "files": {"src/a.ts": {"mutants": ['
     '{"id": "1", "status": "Killed"}, {"id": "2", "status": "Timeout"},'
@@ -32,7 +31,6 @@ def test_mutmut_adapter_parses() -> None:
 
 
 def test_stryker_adapter_parses() -> None:
-    assert score("stryker", STRYKER_SCORE) == 82
     # Killed+Timeout detected; Survived+NoCoverage not; Ignored excluded -> 2/4
     assert score("stryker", STRYKER_FILES) == 50
 
@@ -43,3 +41,18 @@ def test_cargo_mutants_adapter_parses() -> None:
 
 def test_gremlins_adapter_parses() -> None:
     assert score("gremlins", GREMLINS) == 75
+
+
+def test_unparseable_output_raises_not_passes() -> None:
+    import pytest
+
+    for tool, raw in [
+        ("cargo-mutants", ""),
+        ("cargo-mutants", "error: could not compile"),
+        ("gremlins", ""),
+        ("gremlins", "panic: boom"),
+        ("stryker", "{}"),
+        ("stryker", '{"files": {}}'),
+    ]:
+        with pytest.raises(ValueError):
+            score(tool, raw)
