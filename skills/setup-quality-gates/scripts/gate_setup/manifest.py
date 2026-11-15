@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import tomllib
 from pathlib import Path
@@ -18,6 +19,7 @@ KEY_DIRECTIONS: dict[str, str] = {
     "type_strictness": "enum",
     "lint_rules": "set",
     "protected.paths": "set",
+    "drift.bindings": "set",  # ratchet-only: the [drift] spec=key pairs must not shrink
 }
 STRICTNESS_ORDER = ["basic", "standard", "deny-warnings", "strict"]
 LANGUAGES = {"python", "rust", "go", "react-ts"}
@@ -119,9 +121,24 @@ def config_only_keys(profile: dict[str, Any]) -> list[str]:
     )
 
 
-def _native(spec: str, base: Path) -> Any:
-    """`<native_path>#<dotted.key>` -> value from a TOML or JSON file (by extension)."""
-    rel, _, dotted = spec.partition("#")
+def _native(spec: str, base: Path, want: Any) -> Any:
+    """Resolve a drift spec to a comparable native value. Three generic forms:
+
+    `<file>~<regex>`        -> the one capture group's text, coerced to type(want).
+                               Exactly one match required (0 or >1 = drift) so a
+                               decoy line can't mask a lowered real value.
+    `<file>#<dotted>|len`   -> len() of the list at that dotted key (count gate).
+    `<file>#<dotted>`       -> the value at that dotted key (TOML or JSON by suffix).
+    """
+    if "~" in spec:  # check regex form first: a regex may itself contain '#' or '|'
+        rel, _, pattern = spec.partition("~")
+        text = (base / rel).read_text()
+        matches = re.findall(pattern, text)
+        if len(matches) != 1:
+            raise ValueError(f"regex matched {len(matches)} time(s), need exactly 1")
+        return type(want)(matches[0])
+    want_len = spec.endswith("|len")
+    rel, _, dotted = spec.removesuffix("|len").partition("#")
     path = base / rel
     with path.open("rb") as f:
         v: Any = json.load(f) if path.suffix == ".json" else tomllib.load(f)
@@ -129,7 +146,7 @@ def _native(spec: str, base: Path) -> Any:
         if not isinstance(v, dict) or part not in v:
             raise KeyError(part)
         v = v[part]  # pyright: ignore[reportUnknownVariableType]
-    return cast("Any", v)
+    return len(cast("Any", v)) if want_len else cast("Any", v)
 
 
 def check_drift(manifest: dict[str, Any], base: Path, gates: Path | None = None) -> list[str]:
@@ -144,10 +161,10 @@ def check_drift(manifest: dict[str, Any], base: Path, gates: Path | None = None)
             out.append(f"{spec}: drift binding must be a string, got {mkey!r}")
             continue
         try:
-            nat = _native(spec, base)
             want = _lookup(manifest, mkey)
-        except (OSError, KeyError, ValueError, ManifestError) as e:  # ValueError: bad TOML/JSON
-            out.append(f"{spec}: unreadable ({e!r})")
+            nat = _native(spec, base, want)
+        except (OSError, KeyError, ValueError, TypeError, ManifestError) as e:
+            out.append(f"{spec}: unreadable ({e!r})")  # ValueError: bad TOML/JSON or regex miss
             continue
         if nat != want:
             out.append(f"{spec}: native={nat!r} manifest[{mkey}]={want!r}")

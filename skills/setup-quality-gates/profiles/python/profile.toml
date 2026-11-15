@@ -48,7 +48,7 @@ blocking = true
 tools = ["import-linter"]
 impl_lang = "python"
 threshold_key = "arch_contracts_min"
-threshold_mechanism = "none"         # a contract COUNT, not a single config scalar -> no drift bind
+threshold_mechanism = "none"         # a COUNT, not a config scalar -> bound via `|len`, not a plain drift bind
 blocking = true
 
 [gates.suppressions]
@@ -64,6 +64,10 @@ blocking = false
 "pyproject.toml#tool.ruff.lint.select" = "lint_rules"
 "pyproject.toml#tool.pyright.typeCheckingMode" = "type_strictness"
 "pyproject.toml#tool.vulture.min_confidence" = "vulture_confidence"
+# `|len`: importlinter contract COUNT must == arch_contracts_min (adopter must configure import-linter).
+'pyproject.toml#tool.importlinter.contracts|len' = "arch_contracts_min"
+# `~regex` (one capture group, line-anchored, exactly one match): nightly --min floor must == mutation_floor.
+'.github/workflows/nightly-mutation.yml~(?m)^\s*run: python scripts/mutation_score\.py --min (\d+)\s*$' = "mutation_floor"
 
 [coverage]
 metric = "branch"

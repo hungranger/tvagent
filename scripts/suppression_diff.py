@@ -16,7 +16,13 @@ from pathlib import Path
 
 # This script's own pattern literals, and the docs that name them in prose,
 # would otherwise flag themselves as "new suppressions" -- not real ones.
-SELF_EXCLUDE = {"scripts/suppression_diff.py", "docs/agent-safety.md", "docs/dev-tooling.md"}
+SELF_EXCLUDE = {
+    "scripts/suppression_diff.py",
+    "docs/agent-safety.md",
+    "docs/dev-tooling.md",
+    # the token scanner's own test holds literal suppression tokens as fixtures
+    "skills/setup-quality-gates/tests/test_suppression_tokens.py",
+}
 
 # Per-language suppression tokens. Any ADDED line containing one is flagged,
 # whatever the file extension (a stray token is itself worth a reviewer's look).

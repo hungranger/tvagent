@@ -13,6 +13,9 @@ type_strictness = "strict"
 lint_rules = ["E", "C901"]
 [protected]
 paths = [".github/**", "quality-gates.toml"]
+[drift]
+"a.toml#x.y" = "coverage_floor"
+"b.toml#p.q" = "complexity_max"
 """
 
 
@@ -60,6 +63,38 @@ def test_protected_paths_shrink_fails(tmp_path: Path):
 
 def test_deleted_key_fails(tmp_path: Path):
     _fails(tmp_path, "mutation_floor = 70\n", "", "DELETED")
+
+
+def test_drift_binding_deleted_fails(tmp_path: Path):
+    _fails(tmp_path, '"b.toml#p.q" = "complexity_max"\n', "", "drift.bindings")
+
+
+def test_drift_binding_retargeted_fails(tmp_path: Path):
+    # retarget a binding to a different native path -> the spec=key pair changes
+    _fails(tmp_path, '"a.toml#x.y"', '"a.toml#x.z"', "drift.bindings")
+
+
+def test_drift_table_deleted_fails(tmp_path: Path):
+    _fails(
+        tmp_path,
+        '[drift]\n"a.toml#x.y" = "coverage_floor"\n"b.toml#p.q" = "complexity_max"\n',
+        "",
+        "drift.bindings",
+    )
+
+
+def test_drift_in_sync_passes(tmp_path: Path):
+    r = _run(tmp_path, BASE)
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_legit_improvement_passes(tmp_path: Path):
+    # adding a new drift binding AND raising a floor is an improvement, not a weakening
+    pr = BASE.replace("coverage_floor = 90", "coverage_floor = 95").replace(
+        "[drift]\n", '[drift]\n"c.toml#n.m" = "mutation_floor"\n'
+    )
+    r = _run(tmp_path, pr)
+    assert r.returncode == 0, r.stdout + r.stderr
 
 
 def test_new_key_allowed(tmp_path: Path):

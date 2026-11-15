@@ -54,6 +54,10 @@ def _flat(m: dict[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = dict(m.get("thresholds", {}))
     if "paths" in m.get("protected", {}):
         out["protected.paths"] = m["protected"]["paths"]
+    # Always emit (even as []) so deleting the whole [drift] table reads as a
+    # shrunk set, not a new/absent key. spec=key PAIRS catch retargeting a
+    # binding to a different native path, not just deleting one.
+    out["drift.bindings"] = sorted(f"{spec}={key}" for spec, key in m.get("drift", {}).items())
     return out
 
 

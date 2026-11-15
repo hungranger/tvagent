@@ -13,10 +13,7 @@ coverage_floor = 92            # [tool.coverage.report] fail_under
 complexity_max = 10            # [tool.ruff.lint.mccabe] max-complexity
 mutation_floor = 90            # nightly-mutation.yml: mutation_score.py --min 90
 vulture_confidence = 60        # [tool.vulture] min_confidence
-arch_contracts_min = 3         # [tool.importlinter] contract count (3 contracts today).
-# NOTE: mechanism="none" -- the ratchet floors this NUMBER vs master, but nothing
-# yet asserts pyproject.toml actually has >= this many contracts (no counter gate).
-# CODEOWNERS on pyproject.toml is the backstop for contract deletion until then.
+arch_contracts_min = 3         # [tool.importlinter] contract count; bound via `|len` below.
 type_strictness = "strict"     # [tool.pyright] typeCheckingMode
 lint_rules = ["E", "F", "I", "UP", "B", "SIM", "PL", "RUF", "N", "C4", "C901", "PTH"]
 
@@ -44,3 +41,9 @@ paths = [
 "pyproject.toml#tool.ruff.lint.select" = "lint_rules"
 "pyproject.toml#tool.pyright.typeCheckingMode" = "type_strictness"
 "pyproject.toml#tool.vulture.min_confidence" = "vulture_confidence"
+# `|len`: native len(importlinter contracts) must == arch_contracts_min (== = a
+# deleted contract fails; an added one forces a floor bump -- master's shrink rule).
+'pyproject.toml#tool.importlinter.contracts|len' = "arch_contracts_min"
+# `~regex` (one capture group): nightly-mutation.yml's literal --min floor must
+# == mutation_floor. Line-anchored + exactly-one-match so a decoy line can't mask it.
+'.github/workflows/nightly-mutation.yml~(?m)^\s*run: python scripts/mutation_score\.py --min (\d+)\s*$' = "mutation_floor"

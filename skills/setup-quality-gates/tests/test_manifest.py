@@ -123,6 +123,47 @@ def test_check_drift_missing_binding_fails(tmp_path: Path):
     assert r.returncode == 1 and "complexity_max" in r.stderr
 
 
+def test_check_drift_len_suffix(tmp_path: Path):
+    # `#...|len` resolves to len(list) and compares == the bound manifest value.
+    m = (
+        "[thresholds]\narch_contracts_min = 3\n[drift]\n"
+        '"p.toml#tool.importlinter.contracts|len" = "arch_contracts_min"\n'
+    )
+    three = "[tool.importlinter]\ncontracts = [{name='a'}, {name='b'}, {name='c'}]\n"
+    assert _drift(tmp_path, m, p_toml=three).returncode == 0
+    # delete a contract (3 -> 2): native len < manifest floor -> drift
+    two = "[tool.importlinter]\ncontracts = [{name='a'}, {name='b'}]\n"
+    assert _drift(tmp_path, m, p_toml=two).returncode == 1
+    # add a contract (3 -> 4) without bumping the floor: == semantics -> drift
+    four = "[tool.importlinter]\ncontracts = [{name='a'}, {name='b'}, {name='c'}, {name='d'}]\n"
+    assert _drift(tmp_path, m, p_toml=four).returncode == 1
+
+
+def test_check_drift_regex_binding(tmp_path: Path):
+    # `<file>~<regex-with-one-group>`: captured text coerced to manifest type, compared ==.
+    m = (
+        "[thresholds]\nmutation_floor = 90\n[drift]\n"
+        r"'w.yml~(?m)^\s*run: foo --min (\d+)\s*$' = " + '"mutation_floor"\n'
+    )
+    (tmp_path / "quality-gates.toml").write_text(m)
+    (tmp_path / "w.yml").write_text("steps:\n    run: foo --min 90\n")
+    assert _cli(tmp_path, "check-drift", "--profile", ".").returncode == 0
+    (tmp_path / "w.yml").write_text("steps:\n    run: foo --min 50\n")
+    assert _cli(tmp_path, "check-drift", "--profile", ".").returncode == 1
+
+
+def test_check_drift_regex_decoy_line_is_drift(tmp_path: Path):
+    # an attacker adds a decoy `--min 90` line and lowers the real flag: two matches -> drift
+    m = (
+        "[thresholds]\nmutation_floor = 90\n[drift]\n"
+        r"'w.yml~(?m)^\s*run: foo --min (\d+)\s*$' = " + '"mutation_floor"\n'
+    )
+    (tmp_path / "quality-gates.toml").write_text(m)
+    (tmp_path / "w.yml").write_text("steps:\n    run: foo --min 90\n    run: foo --min 50\n")
+    r = _cli(tmp_path, "check-drift", "--profile", ".")
+    assert r.returncode == 1 and "Traceback" not in r.stderr
+
+
 def test_check_drift_nonstring_binding_is_drift(tmp_path: Path):
     prof = SKILL / "tests" / "fixtures" / "profile_fake"
     (tmp_path / "quality-gates.toml").write_text(

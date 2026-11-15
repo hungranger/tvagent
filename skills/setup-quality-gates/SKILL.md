@@ -92,7 +92,11 @@ See `references/thresholds.md` for the exact measure/parse recipe per gate.
    Show the proposed contracts (forbidden: core imports adapters/backends;
    independence among sibling adapters) and ask to opt in. If
    `core_candidates` is empty, state plainly that import-linter is skipped
-   and why — never invent contracts on a flat repo.
+   and why — never invent contracts on a flat repo. When skipped, drop
+   `arch_contracts_min` from `[thresholds]` **and** its
+   `...importlinter.contracts|len` line from `[drift]` — the arch gate and its
+   drift binding are opt-in together, or check-drift fails on a missing
+   `[tool.importlinter]` table.
 5. Record every confirmed value in `quality-gates.toml` (the manifest) for
    Phase 4.
 

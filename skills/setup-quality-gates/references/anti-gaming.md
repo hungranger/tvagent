@@ -12,42 +12,81 @@ write and approve a weakening.
 
 ## The ratchet: `scripts/gate_ratchet.py`
 
-**Real invocation — no `--self-check` flag exists.** The script has no
-`argparse`. Its `if __name__ == "__main__":` block *always* runs a
-hardcoded self-check (asserts against two fake config dicts, purely to
-verify the checker functions themselves work) and *then* unconditionally
-calls `main()`. There is no flag that isolates one behavior from the other —
-`python scripts/gate_ratchet.py` runs both, every time. Do not describe or
-invoke a `--self-check` flag; it does not exist.
+The ratchet guards the **normalized manifest** `quality-gates.toml`, not any
+native config file. It reads the working tree's `quality-gates.toml`, runs
+`git show origin/master:quality-gates.toml` (constant
+`BASE_REF = "origin/master"`) for the base, and judges **every key
+generically by its direction** in `gate_setup.manifest.KEY_DIRECTIONS`:
 
-What `main()` actually does: it reads the working tree's `pyproject.toml`,
-then runs `git show origin/master:pyproject.toml` (the constant
-`BASE_REF = "origin/master"`) to get the base version. If that ref is
-missing (`git show` fails — e.g. `origin/master` isn't fetched), it prints a
-note and **skips the pyproject-based checks entirely**, returning 0 for that
-part. If the base is present, it diffs current vs. base per gate:
+- `scalar-up` must not go down (`coverage_floor`, `mutation_floor`,
+  `arch_contracts_min`)
+- `scalar-down` must not go up (`complexity_max`, `vulture_confidence`)
+- `enum` strictness index must not drop (`type_strictness`, via
+  `STRICTNESS_ORDER`)
+- `set` must not shrink (`lint_rules`, `protected.paths`, and
+  `drift.bindings`)
 
-- coverage `fail_under` must not go down
-- ruff `select`/`extend-select` must not lose a rule
-- mccabe `max-complexity` must not go up
-- vulture `min_confidence` must not go up (higher = noisier = weaker)
-- pyright must stay `strict` and must not loosen `reportMissingImports` /
-  `reportMissingModuleSource` / `reportMissingTypeStubs` toward `"none"`
-- import-linter must not lose a contract
-- (separately) the nightly-mutation workflow's `--min` floor must not go down
+There is no language-specific logic in the ratchet — it only knows keys and
+directions. A key present on master but absent in the tree is a **hard
+fail** (deletion is the strongest weakening); a key absent on master is new
+and allowed. If `git show` can't find the base (`origin/master` not fetched),
+it prints a note and skips the ratchet (bootstrap), returning 0.
 
-A gate absent on master (no baseline) is skipped with a printed note —
-absence isn't intent. A gate that *was* present on master and is now
-**missing** from the tree is a hard failure, not a skip — deletion is the
-strongest possible weakening.
+**`drift.bindings` is a ratchet-tracked set.** `_flat()` emits
+`drift.bindings` as the sorted `spec=key` **pairs** of the `[drift]` table
+(always emitted, even as `[]`). Because it's a must-not-shrink `set`,
+deleting a `[drift]` line, deleting the whole table, **or retargeting a
+binding to a different native path** (which changes the `spec=key` pair) all
+fail the ratchet — the same way `protected.paths` can only grow. The cost is
+symmetric to `protected.paths`: a binding can never be retargeted or removed
+without a CODEOWNER-reviewed master change.
+
+**The `--self-check` flag.** The `if __name__ == "__main__":` block *always*
+runs its hardcoded asserts (against two fake manifest dicts, to verify the
+checker functions themselves). Then its last line is
+`sys.exit(0 if "--self-check" in sys.argv else main())`: with `--self-check`
+it exits 0 after the asserts **instead of** calling `main()`; without it,
+`main()` runs (the real ratchet). CI invokes it with no flag.
+
+**Native config is bound to the manifest by `check-drift`, not the ratchet.**
+The ratchet floors the manifest *numbers*; `gate_setup.manifest check-drift`
+is the separate blocking gate that asserts each native config file actually
+*equals* its bound manifest value (see below). Three generic binding forms, all
+language-agnostic (no tool names in the code — only in profile/manifest data):
+
+- `<file>#<dotted.key>` — the value at a dotted key of a TOML/JSON file must
+  `==` the manifest value.
+- `<file>#<dotted.key>|len` — `len()` of the list at that key must `==` the
+  manifest value. This reproduces the old import-linter *contract-count* floor
+  generically: deleting a contract drops the count below the floor and fails;
+  adding one without bumping the floor also fails (`==` semantics), forcing an
+  intentional floor bump.
+- `<file>~<regex>` — the one capture group of a regex, coerced to the manifest
+  value's type, must `==` it, and the regex must match **exactly once** (0 or
+  >1 matches = drift, so a decoy line can't mask a lowered real value). This
+  reproduces the old nightly-mutation `--min` floor generically, since the
+  nightly YAML isn't TOML/JSON and the dotted-key parser can't read it. The
+  binding stays line-anchored (`(?m)^...$`) against the literal `--min <N>`
+  kept in `nightly-mutation.yml`.
+
+**Deliberately narrower than the old pyright sub-key check (F1(b)).** The old
+`pyproject.toml`-based ratchet also blocked loosening pyright's
+`reportMissingImports` / `reportMissingModuleSource` / `reportMissingTypeStubs`
+toward `"none"`. The manifest ratchet does **not** track these. In tvagent they
+are already `none` / `none` / `warning` on purpose (optional runtime backends
+have no stubs), and pyright's exit code reflects **errors only** — loosening
+these three toward `"none"` changes no gate outcome here, so there is nothing
+to ratchet. An adopter who instead sets any of them to `"error"` as a real gate
+should add it as its own `[drift]` binding (e.g.
+`"pyproject.toml#tool.pyright.reportMissingImports" = "..."`), which the
+generic drift mechanism enforces without code changes.
 
 **Operational requirement:** CI must fetch `origin/master` as a real
 remote-tracking ref for the ratchet to have a base to diff against —
 `fetch-depth: 0` on `actions/checkout` (as in the shipped `ci.yml`), or an
-equivalent full/deep clone. Without it, the ratchet silently no-ops on the
-pyproject checks. This is why `ci.yml`'s checkout step is pinned to
-`fetch-depth: 0` and has a belt-and-braces `git fetch` of the base ref for
-PR events.
+equivalent full/deep clone. Without it, the ratchet skips (bootstrap note).
+This is why `ci.yml`'s checkout step is pinned to `fetch-depth: 0` and has a
+belt-and-braces `git fetch` of the base ref for PR events.
 
 ## The suppression diff: `scripts/suppression_diff.py`
 
