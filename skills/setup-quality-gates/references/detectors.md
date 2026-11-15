@@ -32,6 +32,10 @@ react-ts; `pyproject.toml` or `setup.py` -> python.
 
 ## Handling nulls
 
+The `python.*` detail keys appear only when `language == "python"`; for
+rust/go/react-ts `detect()` emits a stub `<lang>: {pkg_manager: null,
+existing: {}}`, and the `python.*` null-handling below applies to python repos only.
+
 `detect()` never fails on a missing signal — it returns `null` for that key.
 Treat every `null` as a stop-and-ask, not a default:
 

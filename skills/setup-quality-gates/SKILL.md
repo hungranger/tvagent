@@ -65,10 +65,12 @@ complexity, lint, types, deadcode, mutation, audit, arch):
 | react-ts | `vitest run --coverage` | biome cognitive complexity | `tsc --noEmit` | `knip` |
 
 Read the coverage %, the worst function complexity, and the types/dead-code
-finding counts. If any tool isn't installed, install it into the project's dev
-   dependencies first, using the package manager detected in Phase 0
-   (`uv add --dev <tool>`, `poetry add --group dev <tool>`, etc.) — don't
-   run an undeclared tool.
+finding counts. If any tool isn't installed, install it first — don't run an
+undeclared tool. Python: add it to the dev dependencies with the manager
+detected in Phase 0 (`uv add --dev <tool>`, `poetry add --group dev <tool>`).
+Rust: `cargo install <tool>` / `rustup component add`. Go: `go install
+<tool>@latest`. react-ts: `npm i -D <tool>` (or the repo's JS package
+manager).
 
 See `references/thresholds.md` for the exact measure/parse recipe per gate.
 
@@ -127,9 +129,10 @@ For each target file (`pyproject.toml` gate blocks, `.pre-commit-config.yaml`,
    **Never blindly re-render over an existing hand-authored
    `quality-gates.toml`**: the TOML dump does not preserve user comments.
    Edit an existing manifest in place; re-render only a fresh one. After
-   writing, run `python -P -m gate_setup.manifest check-drift` (from the
-   skill's `scripts/`, `-P` stops cwd module shadowing) to prove native
-   configs equal the manifest. The same check runs as a blocking CI gate.
+   writing, run, from the **target repo root**,
+   `PYTHONPATH=<path-to-skill>/scripts python -P -m gate_setup.manifest check-drift --file quality-gates.toml --profile .`
+   (`--file` = the target repo's manifest, `--profile` = the repo root; `-P`
+   stops cwd module shadowing) to prove native configs equal the manifest. The same check runs as a blocking CI gate.
 1. Render the template: substitute every confirmed template token
    (`templates/TOKENS.md`); strip `# TEMPLATE-CONDITIONAL: uv-only` lines
    (currently just the `uv-lock-check` pre-commit hook) when the detected
