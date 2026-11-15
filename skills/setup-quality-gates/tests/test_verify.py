@@ -1,28 +1,39 @@
 import shutil
 import sys
-import textwrap
 from pathlib import Path
 
 SKILL = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SKILL / "scripts"))
 from gate_setup.verify import prove_ratchet_bites  # noqa: E402
 
+MANIFEST = """[meta]
+language = "python"
+[thresholds]
+coverage_floor = 90
+"""
+
 
 def _repo(tmp_path: Path) -> Path:
     (tmp_path / "scripts").mkdir()
     shutil.copy(SKILL / "templates/scripts/gate_ratchet.py", tmp_path / "scripts/gate_ratchet.py")
-    (tmp_path / "pyproject.toml").write_text(textwrap.dedent("""
-        [tool.coverage.report]
-        fail_under = 90
-    """))
+    shutil.copytree(
+        SKILL / "scripts/gate_setup",
+        tmp_path / "scripts/gate_setup",
+        ignore=shutil.ignore_patterns("__pycache__"),
+    )
+    (tmp_path / "quality-gates.toml").write_text(MANIFEST)
     return tmp_path
 
-def test_verify_detects_weakening(tmp_path: Path) -> None:
-    # the proof must return True == "ratchet correctly blocked a simulated weakening"
-    assert prove_ratchet_bites(_repo(tmp_path)) is True
 
-def test_verify_leaves_pyproject_untouched(tmp_path: Path) -> None:
+def test_verify_seeds_manifest(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
-    before = (repo / "pyproject.toml").read_text()
-    prove_ratchet_bites(repo)
-    assert (repo / "pyproject.toml").read_text() == before
+    (repo / "pyproject.toml").write_text("[project]\nname='x'\n")
+    assert prove_ratchet_bites(repo) is True
+    assert (repo / "quality-gates.toml").read_text() == MANIFEST
+    assert (repo / "pyproject.toml").read_text() == "[project]\nname='x'\n"
+
+
+def test_verify_false_without_manifest(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    (repo / "quality-gates.toml").unlink()
+    assert prove_ratchet_bites(repo) is False
