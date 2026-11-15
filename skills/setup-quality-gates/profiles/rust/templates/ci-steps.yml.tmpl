@@ -1,0 +1,9 @@
+# Gate steps to merge into the CI workflow.
+- run: cargo fmt --check
+- run: cargo clippy --all-targets -- -D warnings
+- run: cargo llvm-cov --fail-under-lines {{coverage_floor}}
+- run: cargo audit
+# nightly: cargo mutants; score = caught / (caught + missed)
+- run: |
+    cargo mutants
+    python3 -c "import json;o=json.load(open('mutants.out/outcomes.json'));c=o['caught'];m=o['missed'];s=100*c/max(c+m,1);print(s);raise SystemExit(s<{{mutation_floor}})"
