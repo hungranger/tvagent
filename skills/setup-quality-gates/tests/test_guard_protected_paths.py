@@ -129,3 +129,42 @@ def test_symlinked_root_package_json_asks(tmp_path: Path):
     (outside / "p.json").write_text("{}")
     (repo / "package.json").symlink_to(outside / "p.json")
     assert _asks(repo, "package.json")
+
+
+# Regression guard: every known path-normalization evasion against a protected
+# file, plus two must-stay-silent paths, in one matrix. Each `..`/symlink round
+# regressed before; this enumerates all of them so a regression turns a row red.
+# Note: the symlink-to-outside case uses settings.json and the symlink-dir+dotdot
+# cases resolve to settings.local.json — different files, so true-resolve of the
+# dir-dotdot path doesn't follow the outside symlink.
+@pytest.mark.parametrize(
+    ("case", "expected"),
+    [
+        ("plain", True),  # pyproject.toml
+        ("dotdot", True),  # sub/../pyproject.toml
+        ("symlink_to_outside", True),  # .claude/settings.json -> outside (needs lexical)
+        ("symlink_dir_dotdot", True),  # link/../settings.local.json, link->.claude/sub
+        ("symlink_dir_dotdot_root", True),  # link/../../package.json (ROOT_ONLY via resolve)
+        ("absolute_in_repo", True),  # str(repo/package.json) (ROOT_ONLY via relativize)
+        ("nested_package_json_silent", False),  # src/x/package.json
+        ("unrelated_silent", False),  # src/app.py
+    ],
+)
+def test_evasion_matrix(tmp_path: Path, case: str, expected: bool):
+    repo, outside = tmp_path / "repo", tmp_path / "outside"
+    (repo / ".claude" / "sub").mkdir(parents=True)
+    outside.mkdir()
+    (outside / "s.json").write_text("{}")
+    (repo / ".claude" / "settings.json").symlink_to(outside / "s.json")
+    (repo / "link").symlink_to(repo / ".claude" / "sub")
+    paths = {
+        "plain": "pyproject.toml",
+        "dotdot": "sub/../pyproject.toml",
+        "symlink_to_outside": ".claude/settings.json",
+        "symlink_dir_dotdot": "link/../settings.local.json",
+        "symlink_dir_dotdot_root": "link/../../package.json",
+        "absolute_in_repo": str(repo / "package.json"),
+        "nested_package_json_silent": "src/x/package.json",
+        "unrelated_silent": "src/app.py",
+    }
+    assert _asks(repo, paths[case]) is expected

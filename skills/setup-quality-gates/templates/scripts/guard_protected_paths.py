@@ -145,11 +145,15 @@ def _rel_to_repo(p: Path) -> PurePosixPath:
 
 
 def _candidates(file_path: str) -> list[PurePosixPath]:
-    """Lexical (`..` collapsed, symlinks NOT followed) and resolved paths; protected if either hits."""
+    """Lexical (`..` collapsed, symlinks kept) + resolved path; protected if either hits."""
     cwd = Path.cwd().resolve()
     try:
+        # lexical: `..` collapsed TEXTUALLY, symlinks NOT followed (catches plain-`..`).
         lexical = Path(os.path.normpath(cwd / file_path))
-        return [_rel_to_repo(lexical), _rel_to_repo(lexical.resolve())]
+        # resolved: TRUE OS order — symlinks first, THEN `..` (catches symlink + symlink/..).
+        # NOT lexical.resolve(): normpath already collapsed `..`, hiding the symlink.
+        resolved = (cwd / file_path).resolve()
+        return [_rel_to_repo(lexical), _rel_to_repo(resolved)]
     except Exception:  # e.g. embedded NUL: never silently allow
         return [PurePosixPath(file_path)]
 
