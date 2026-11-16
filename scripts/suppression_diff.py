@@ -16,14 +16,45 @@ from pathlib import Path
 
 # This script's own pattern literals, and the docs that name them in prose,
 # would otherwise flag themselves as "new suppressions" -- not real ones.
-SELF_EXCLUDE = {"scripts/suppression_diff.py", "docs/agent-safety.md", "docs/dev-tooling.md"}
+SELF_EXCLUDE = {
+    "scripts/suppression_diff.py",
+    "docs/agent-safety.md",
+    "docs/dev-tooling.md",
+    # the token scanner's own test holds literal suppression tokens as fixtures
+    "skills/setup-quality-gates/tests/test_suppression_tokens.py",
+}
+
+# Per-language suppression tokens. Any ADDED line containing one is flagged,
+# whatever the file extension (a stray token is itself worth a reviewer's look).
+SUPPRESSION_TOKENS: dict[str, list[tuple[re.Pattern[str], str]]] = {
+    "python": [
+        (re.compile(r"#\s*noqa\b"), "noqa"),
+        (re.compile(r"#\s*type:\s*ignore"), "type: ignore"),
+        (re.compile(r"#\s*pyright:\s*ignore"), "pyright: ignore"),
+        (re.compile(r"#\s*pragma:\s*no cover"), "pragma: no cover"),
+    ],
+    "rust": [
+        (re.compile(re.escape("#[allow(")), "#[allow("),
+        (re.compile(re.escape("#![allow(")), "#![allow("),
+    ],
+    "go": [
+        (re.compile(re.escape("//nolint")), "//nolint"),
+    ],
+    "typescript": [
+        # negative lookahead: a next-line token must not also count as a bare one
+        (re.compile(r"// eslint-disable(?!-next-line)"), "// eslint-disable"),
+        (re.compile(re.escape("eslint-disable-next-line")), "eslint-disable-next-line"),
+        (re.compile(re.escape("/* eslint-disable */")), "/* eslint-disable */"),
+        (re.compile(re.escape("// @ts-ignore")), "// @ts-ignore"),
+        (re.compile(re.escape("// @ts-expect-error")), "// @ts-expect-error"),
+        (re.compile(re.escape("// @ts-nocheck")), "// @ts-nocheck"),
+        (re.compile(re.escape("// biome-ignore")), "// biome-ignore"),
+    ],
+}
 
 PATTERNS: list[tuple[re.Pattern[str], str]] = [
-    (re.compile(r"#\s*noqa\b"), "noqa"),
-    (re.compile(r"#\s*type:\s*ignore"), "type: ignore"),
-    (re.compile(r"#\s*pyright:\s*ignore"), "pyright: ignore"),
+    *(pair for tokens in SUPPRESSION_TOKENS.values() for pair in tokens),
     (re.compile(r"#\s*nosemgrep"), "nosemgrep"),
-    (re.compile(r"#\s*pragma:\s*no cover"), "pragma: no cover"),
     (re.compile(r"--no-verify"), "--no-verify"),
     (re.compile(r"\|\|\s*true"), "|| true"),
     (re.compile(r"continue-on-error"), "continue-on-error"),

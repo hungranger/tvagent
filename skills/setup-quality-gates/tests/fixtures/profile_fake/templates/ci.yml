@@ -1,0 +1,2 @@
+steps:
+  - run: pytest --cov --cov-fail-under={{coverage_floor}}

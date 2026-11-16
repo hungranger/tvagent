@@ -24,7 +24,24 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--min", type=float, required=True, help="minimum score, in percent")
     parser.add_argument("--stats-file", type=Path, default=DEFAULT_STATS_FILE)
+    parser.add_argument("--tool", default="mutmut", help="mutmut|cargo-mutants|stryker|gremlins")
     args = parser.parse_args()
+
+    if args.tool != "mutmut":
+        # Other tools: --stats-file holds the captured raw output; adapters live
+        # in gate_setup. Append a skill-tree fallback (the installed script dir is
+        # already sys.path[0], so it is never shadowed); import lazily since only
+        # non-mutmut tools need it.
+        sys.path.append(str(Path(__file__).resolve().parents[2] / "scripts"))
+        from gate_setup.mutation_adapters import score as tool_score  # noqa: PLC0415
+
+        pct = tool_score(args.tool, args.stats_file.read_text())
+        print(f"mutation score: {pct}% ({args.tool})")
+        if pct < args.min:
+            print(f"FAIL: below floor of {args.min}%")
+            return 1
+        print(f"OK: at or above floor of {args.min}%")
+        return 0
 
     stats = json.loads(args.stats_file.read_text())
     score = score_percent(stats)

@@ -1,0 +1,75 @@
+# Rust quality-gate profile (RUST-NATIVE-FIRST: every tool here is a Rust binary).
+# type_strictness has no native scalar to drift-bind (clippy `-D warnings` is a CLI flag),
+# so the types gate carries no threshold.
+
+[gates.lint]
+tools = ["clippy"]
+impl_lang = "rust"
+threshold_mechanism = "none"
+blocking = true
+
+[gates.format]
+tools = ["rustfmt"]
+impl_lang = "rust"
+threshold_mechanism = "none"
+blocking = true
+
+[gates.types]
+tools = ["clippy"]                   # `cargo clippy -- -D warnings`
+impl_lang = "rust"
+threshold_mechanism = "none"
+blocking = true
+
+[gates.coverage]
+tools = ["cargo-llvm-cov"]
+impl_lang = "rust"
+threshold_key = "coverage_floor"
+threshold_mechanism = "flag"         # --fail-under-lines in ci-steps.yml
+blocking = true
+
+[gates.complexity]
+tools = ["clippy"]
+impl_lang = "rust"
+threshold_key = "complexity_max"
+threshold_mechanism = "config"       # clippy.toml cognitive-complexity-threshold
+blocking = true
+
+[gates.deadcode]
+tools = ["cargo-udeps"]
+impl_lang = "rust"
+threshold_mechanism = "none"
+blocking = true
+
+[gates.mutation]
+tools = ["cargo-mutants"]
+impl_lang = "rust"
+threshold_key = "mutation_floor"
+threshold_mechanism = "flag"         # score check in ci-steps.yml
+blocking = true
+
+[gates.audit]
+tools = ["cargo-audit"]
+impl_lang = "rust"
+threshold_mechanism = "none"
+blocking = true
+
+[drift]
+"clippy.toml#cognitive-complexity-threshold" = "complexity_max"
+
+[coverage]
+metric = "line"
+
+[measure]
+coverage = "cargo llvm-cov --summary-only"
+complexity = "cargo clippy -- -W clippy::cognitive_complexity"
+lint = "cargo clippy --all-targets"
+types = "cargo clippy --all-targets -- -D warnings"
+deadcode = "cargo +nightly udeps"
+mutation = "cargo mutants"
+audit = "cargo audit"
+
+[greenfield]
+coverage_floor = 80
+complexity_max = 15
+mutation_floor = 70
+type_strictness = "deny-warnings"

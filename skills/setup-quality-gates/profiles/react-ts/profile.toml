@@ -1,0 +1,82 @@
+# react-ts quality-gate profile. Biome (one Rust binary) replaces prettier+eslint.
+# type_strictness ("strict") cannot be drift-bound: tsconfig `strict` is a boolean, the
+# registry enum is a string. tsconfig template pins strict=true; types gate carries no key.
+
+[gates.lint]
+tools = ["biome"]
+impl_lang = "rust"
+threshold_mechanism = "none"
+blocking = true
+
+[gates.format]
+tools = ["biome"]
+impl_lang = "rust"
+threshold_mechanism = "none"
+blocking = true
+
+[gates.complexity]
+tools = ["biome"]
+impl_lang = "rust"
+threshold_key = "complexity_max"
+threshold_mechanism = "config"       # biome.json noExcessiveCognitiveComplexity.maxAllowedComplexity
+blocking = true
+
+[gates.types]
+tools = ["tsc"]                      # tsc --noEmit, strict from tsconfig.json
+impl_lang = "node"
+threshold_mechanism = "none"
+blocking = true
+
+[gates.coverage]
+tools = ["vitest"]
+impl_lang = "node"
+threshold_key = "coverage_floor"
+threshold_mechanism = "flag"         # --coverage.thresholds.lines in ci-steps.yml
+blocking = true
+
+[gates.deadcode]
+tools = ["knip"]
+impl_lang = "node"
+threshold_mechanism = "none"
+blocking = true
+
+[gates.mutation]
+tools = ["stryker"]
+impl_lang = "node"
+threshold_key = "mutation_floor"
+threshold_mechanism = "flag"         # --thresholds.break in ci-steps.yml
+blocking = true
+
+[gates.audit]
+tools = ["osv-scanner", "npm audit"]
+impl_lang = "go"
+threshold_mechanism = "none"
+blocking = true
+
+[gates.arch]
+tools = ["dependency-cruiser"]
+impl_lang = "node"
+threshold_mechanism = "none"
+blocking = false                     # optional
+
+[drift]
+"biome.json#linter.rules.complexity.noExcessiveCognitiveComplexity.options.maxAllowedComplexity" = "complexity_max"
+
+[coverage]
+metric = "line"
+
+[measure]
+coverage = "vitest run --coverage"
+complexity = "biome lint --only=complexity/noExcessiveCognitiveComplexity ."
+lint = "biome check ."
+types = "tsc --noEmit"
+deadcode = "knip"
+mutation = "stryker run"
+audit = "osv-scanner ."
+arch = "depcruise src"
+
+[greenfield]
+coverage_floor = 80
+complexity_max = 15
+mutation_floor = 60
+type_strictness = "strict"

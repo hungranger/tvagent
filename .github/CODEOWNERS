@@ -21,3 +21,7 @@
 /scripts/gate_ratchet.py      @hungranger
 /scripts/suppression_diff.py  @hungranger
 /scripts/mutation_score.py    @hungranger
+# The manifest holds every threshold; gate_setup/ is the ratchet + drift
+# registry that judges it. Both are gate-defining.
+/quality-gates.toml           @hungranger
+/scripts/gate_setup/          @hungranger
